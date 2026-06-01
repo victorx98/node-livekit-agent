@@ -1,0 +1,6 @@
+# pnpm 11+ reads the build-script allowlist here (no longer from package.json).
+# esbuild ships a platform-native binary built via a postinstall script.
+onlyBuiltDependencies:
+  - esbuild
+allowBuilds:
+  esbuild: true
