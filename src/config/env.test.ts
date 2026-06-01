@@ -15,6 +15,7 @@ describe("loadEnv", () => {
       WEBHOOK_MAX_RETRIES: "5",
       WEBHOOK_RETRY_BASE_MS: "2000",
       RECORDING_REQUIRED: "true",
+      RECONNECT_MAX_RETRIES: "4",
     });
 
     expect(env.nodeEnv).toBe("development");
@@ -28,6 +29,7 @@ describe("loadEnv", () => {
     expect(env.webhookMaxRetries).toBe(5);
     expect(env.webhookRetryBaseMs).toBe(2000);
     expect(env.recordingRequired).toBe(true);
+    expect(env.reconnectMaxRetries).toBe(4);
   });
 
   it("applies documented defaults (§7) for an empty environment", () => {
@@ -44,6 +46,7 @@ describe("loadEnv", () => {
     expect(env.webhookMaxRetries).toBe(3);
     expect(env.webhookRetryBaseMs).toBe(1000);
     expect(env.recordingRequired).toBe(false);
+    expect(env.reconnectMaxRetries).toBe(3);
   });
 
   it("exposes optional connection settings as undefined when unset", () => {

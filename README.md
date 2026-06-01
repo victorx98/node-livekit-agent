@@ -15,30 +15,31 @@ architecture map lives in
 Run `pnpm verify` before committing implementation work. It runs linting,
 typechecking, tests, and the harness structure check.
 
-## Status: Phase 2 — Durable state + transcript (Redis)
+## Status: Phase 3 — Reconnect + reseed (never lose context)
 
-The Phase 1 talking interviewer now persists. Interview state (deterministic:
-question progress, recent-turns ring buffer, stats) and the full transcript are
-written through to Redis on every turn, and the job tracker is Redis-backed, so
-job state survives a child-process crash. No reconnect/reseed yet — persistence
-only.
+The interview runs through a **ContextManager**. The OpenAI plugin already
+reconnects transient socket drops (replaying its in-memory context); when a
+session fails *fatally* (the plugin exhausts its retries and `AgentSession`
+closes with `CloseReason.ERROR`), the ContextManager opens a fresh realtime
+session **reseeded from the durable Redis recap** (covered/pending questions +
+recent turns) and continues — up to `RECONNECT_MAX_RETRIES`, then fails the job.
 
-**Implemented (Phase 2)**
+**Implemented (Phase 3)**
 
-- Pure deterministic interview-state model + reducers — `src/interview/interviewState.ts`.
-- Transcript event shape + role mapping — `src/interview/transcriptStore.ts`.
-- Lazy Redis connection — `src/state/redisClient.ts`.
-- Durable store (only Redis-touching module) — `src/state/redisStore.ts`.
-- Redis-backed job tracker behind the existing interface — `src/ops/jobTracker.ts`.
-- Per-turn write-through wired into `src/agent.ts`.
+- Pure reseed builder (instructions + recap from state) — `src/interview/reseed.ts`.
+- Reconnect/reseed controller, injected-effect and fault-injectable —
+  `src/interview/contextManager.ts`.
+- Wired into `src/agent.ts`; `RECONNECT_MAX_RETRIES` in `src/config/env.ts`.
+- Duration cap (`min(durationMins, 59)`) and the `assertProviderAllowed` Gemini
+  gate bound every run (carried from Phase 1, confirmed).
 
 **From earlier phases**
 
 - LiveKit worker + agent, OpenAI realtime (Gemini gated), instruction builder,
-  `AgentMetadata`→`ResolvedJobConfig` contract with zod validation, env loading,
-  `pino` logger with secret redaction.
+  durable Redis state + transcript + job tracker, the
+  `AgentMetadata`→`ResolvedJobConfig` contract, env loading, redacting logger.
 
-**Not yet** (later phases): reconnect/reseed from the persisted state, S3
+**Not yet** (later phases): proactive session rotation (no-op hook), S3
 recording/Egress, monitoring API, webhooks, telemetry, concurrency cap, graceful
 draining.
 
@@ -87,6 +88,24 @@ without LiveKit if you want a quick, credential-free check:
 ```bash
 REDIS_URL=redis://localhost:6379 node scripts/redis-smoke.mjs
 ```
+
+### Reconnect + reseed (Phase 3 acceptance)
+
+The reconnect/reseed logic is proven by a **deliberate fault-injection unit
+test** that needs no credentials — a fake session factory fails N times, and the
+controller is asserted to reseed (recap carried), count reconnects, and give up
+after the cap:
+
+```bash
+pnpm test src/interview/contextManager.test.ts
+```
+
+Live: during an interview, force a disconnect. A transient socket drop is
+recovered by the OpenAI plugin (context replayed from memory). A *fatal* failure
+(plugin retries exhausted) makes `AgentSession` close with `CloseReason.ERROR`;
+the worker logs `provider_reconnect_started` / `provider_reconnect_completed`,
+opens a fresh session seeded with the recap, and the agent continues from where
+it left off. Tune `RECONNECT_MAX_RETRIES` to bound the attempts.
 
 ## Requirements
 

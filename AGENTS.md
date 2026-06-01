@@ -16,19 +16,20 @@ of truth lives in the linked docs.
 
 ## Project Shape
 
-This is a Node.js/TypeScript LiveKit AI interview agent service. Phase 2: the
-worker resolves dispatch metadata, joins a LiveKit room, runs an OpenAI realtime
-voice session, and writes interview state + transcript through to Redis every
-turn. The job tracker is Redis-backed so state survives a child crash. No
-reconnect/reseed yet; `REDIS_URL` is required to run the worker.
+This is a Node.js/TypeScript LiveKit AI interview agent service. Phase 3: the
+worker resolves dispatch metadata, joins a LiveKit room, and runs the interview
+through a ContextManager that reconnects + reseeds from durable Redis state when
+a realtime session fails fatally. State + transcript are written through to Redis
+every turn; the job tracker is Redis-backed. `REDIS_URL` is required.
 
 Core code paths:
 
 - `src/main.ts`: parent worker launcher.
 - `src/agent.ts`: LiveKit job entrypoint + per-turn persistence orchestration.
 - `src/config/`: env and dispatch metadata validation.
-- `src/providers/`: realtime provider routing.
-- `src/interview/`: interview prompt construction + pure state/transcript models.
+- `src/providers/`: realtime provider routing + Gemini gate.
+- `src/interview/`: prompt construction, pure state/transcript/reseed models, and
+  the reconnect/reseed ContextManager.
 - `src/state/`: Redis connection and the durable store (only Redis-touching code).
 - `src/ops/`: logging and job tracking.
 - `src/types/`: shared TypeScript contracts.

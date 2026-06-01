@@ -1,10 +1,9 @@
 # Architecture
 
 This repository implements a Node.js/TypeScript LiveKit AI interview agent.
-Phase 2 adds durable state: the worker proven in Phase 1 now writes interview
-state and transcript through to Redis on every turn, and the job tracker is
-Redis-backed so job state survives a child-process crash. No reconnect/reseed
-yet.
+Phase 3 adds reconnect + reseed on top of durable state: the interview runs
+through a ContextManager that opens a fresh realtime session reseeded from the
+Redis recap when a session fails fatally, so context is never lost.
 
 ## Runtime Flow
 
@@ -16,11 +15,18 @@ External backend
   -> config resolver (`src/config/resolveConfig.ts`)
   -> prompt builder (`src/interview/buildInstructions.ts`)
   -> provider router (`src/providers/createRealtimeModel.ts`)
-  -> realtime voice session
+  -> reconnect controller (`src/interview/contextManager.ts`)
+       -> realtime voice session (rebuilt + reseeded on fatal failure from
+          `src/interview/reseed.ts` using durable state)
        -> per turn: deterministic state (`src/interview/interviewState.ts`)
           + transcript write-through to Redis (`src/state/redisStore.ts`)
   -> Redis-backed job tracker (`src/ops/jobTracker.ts` -> `src/state/redisStore.ts`)
 ```
+
+The OpenAI plugin reconnects transient socket drops itself (replaying in-memory
+context). The ContextManager handles the fatal path: when `AgentSession` closes
+with `CloseReason.ERROR`, it opens a new session seeded with instructions + a
+recap from durable state, up to `RECONNECT_MAX_RETRIES`.
 
 ## Modules
 
@@ -35,6 +41,11 @@ External backend
   and reducers (recent-turns ring buffer, turn stats).
 - `src/interview/transcriptStore.ts`: transcript event shape and chat-role
   mapping (pure).
+- `src/interview/reseed.ts`: pure builder for the reseed context (instructions +
+  recap of covered/pending questions and recent turns).
+- `src/interview/contextManager.ts`: reconnect/reseed controller driven by
+  injected effects (session factory, reconnect callback); includes a no-op
+  rotation hook.
 - `src/providers/createRealtimeModel.ts`: gates providers and creates OpenAI
   realtime models.
 - `src/state/redisClient.ts`: lazy process-wide ioredis connection.
@@ -52,19 +63,20 @@ External backend
 - OpenAI realtime is wired; Gemini remains gated until its long-session behavior
   is verified.
 - Job state, interview state, and transcript are persisted to Redis
-  (write-through). `REDIS_URL` is required to run the worker from Phase 2 on.
-- State is persisted but not yet consumed: reconnect/reseed from Redis is
-  Phase 3. `finalize` sets a TTL on completion; a crash skips it so data
-  survives for recovery.
+  (write-through). `REDIS_URL` is required to run the worker.
+- Reconnect/reseed is implemented: fatal session failures rebuild a fresh
+  session from the durable recap, up to `RECONNECT_MAX_RETRIES`. Proactive
+  rotation of a healthy session is deferred (no-op hook in the ContextManager).
+- The duration cap (`min(durationMins, 59)`) and the `assertProviderAllowed`
+  Gemini gate bound every run.
 - Recording, monitoring API, webhooks, telemetry, concurrency caps, and graceful
   draining are deferred.
-- `resolveJobConfig` and the interview state/transcript models are intentionally
-  pure so they can be tested without LiveKit or Redis runtime dependencies.
+- `resolveJobConfig`, the interview state/transcript/reseed models, and the
+  ContextManager loop are intentionally pure or injected-effect so they can be
+  tested without LiveKit or Redis runtime dependencies.
 
 ## Extension Points
 
-- Add reconnect/reseed by reading `InterviewState` from `RedisStore` and
-  rebuilding the session seed (Phase 3); state is already persisted per turn.
 - Add recording under a dedicated `src/recording/` module so LiveKit egress and
   S3 policy stay separate from `src/agent.ts`.
 - Add monitoring and load management under `src/ops/`.

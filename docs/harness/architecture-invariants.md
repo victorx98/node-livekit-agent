@@ -22,8 +22,12 @@ Redis-backed job tracker in `ops` delegates persistence to `state/redisStore`).
 - Provider modules consume `ResolvedJobConfig`; they do not parse LiveKit job
   metadata directly.
 - Interview prompt and state-model modules are pure: no LiveKit, no Redis.
-  `interview/interviewState.ts` and `interview/transcriptStore.ts` define and
-  reduce state; they must not perform I/O.
+  `interview/interviewState.ts`, `interview/transcriptStore.ts`, and
+  `interview/reseed.ts` define and reduce state; they must not perform I/O.
+- `interview/contextManager.ts` is the reconnect/reseed controller. It performs
+  no I/O directly — it depends only on injected effects (a session factory, a
+  reconnect callback, a logger) so the loop stays unit-testable with fault
+  injection. It must not import LiveKit or Redis.
 - `src/state/redisStore.ts` is the only module that issues Redis commands.
   `src/state/redisClient.ts` owns the lazy connection. Other modules depend on
   `RedisStore` methods, never on `ioredis` directly.

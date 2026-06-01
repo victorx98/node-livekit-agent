@@ -32,6 +32,9 @@ export interface Env {
   webhookMaxRetries: number;
   webhookRetryBaseMs: number;
 
+  // reconnect/reseed (§13)
+  reconnectMaxRetries: number;
+
   // recording policy (§16)
   recordingRequired: boolean;
 
@@ -90,6 +93,8 @@ export function loadEnv(source: EnvSource = process.env): Env {
 
     webhookMaxRetries: intOr(source, "WEBHOOK_MAX_RETRIES", 3),
     webhookRetryBaseMs: intOr(source, "WEBHOOK_RETRY_BASE_MS", 1000),
+
+    reconnectMaxRetries: intOr(source, "RECONNECT_MAX_RETRIES", 3),
 
     recordingRequired: boolOr(source, "RECORDING_REQUIRED", false),
 
