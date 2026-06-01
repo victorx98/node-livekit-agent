@@ -19,4 +19,13 @@ export default [
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
     },
   },
+  {
+    // Plain Node ESM helper scripts (not part of the compiled app).
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { console: "readonly", process: "readonly" },
+    },
+  },
 ];

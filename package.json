@@ -11,12 +11,19 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "node --env-file=.env dist/main.js dev",
+    "start": "node dist/main.js start",
+    "dispatch": "node --env-file=.env scripts/dispatch.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
+    "@livekit/agents": "^1.4.4",
+    "@livekit/agents-plugin-openai": "^1.4.4",
+    "@livekit/rtc-node": "^0.13.29",
+    "livekit-server-sdk": "^2.15.4",
     "pino": "^9.5.0",
     "zod": "^3.23.8"
   },

@@ -1,6 +1,12 @@
 # pnpm 11+ reads the build-script allowlist here (no longer from package.json).
-# esbuild ships a platform-native binary built via a postinstall script.
+# These packages ship platform-native binaries built via postinstall scripts.
 onlyBuiltDependencies:
   - esbuild
+  - protobufjs
+  - sharp
+  - "@ffmpeg-installer/linux-x64"
 allowBuilds:
   esbuild: true
+  protobufjs: true
+  sharp: true
+  "@ffmpeg-installer/linux-x64": true

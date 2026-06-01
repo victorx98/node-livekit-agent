@@ -37,4 +37,5 @@ COPY --chown=node:node --from=builder /app/package.json ./package.json
 EXPOSE 8080
 
 # Exec form so SIGTERM reaches Node for graceful draining (§19).
-CMD ["node", "dist/main.js"]
+# "start" runs the LiveKit worker in production mode.
+CMD ["node", "dist/main.js", "start"]
