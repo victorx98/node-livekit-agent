@@ -24,13 +24,15 @@
 - Create `scripts/harness-check.mjs`: CLI wrapper that exits non-zero on violations.
 - Modify `README.md`: link to harness and architecture docs.
 - Modify `package.json`: add `harness:check`, `verify`, and include script tests in `test`.
+- Modify `vitest.config.ts`: include script-level Vitest tests.
 
 ### Task 1: Write Harness Validator Tests
 
 **Files:**
+
 - Create: `scripts/harnessRules.test.mjs`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```js
 import { describe, expect, it } from "vitest";
@@ -39,8 +41,7 @@ import { validateHarnessFiles } from "./harnessRules.mjs";
 function validFiles(overrides = {}) {
   return {
     "AGENTS.md": "Line 1\nLine 2\n",
-    "README.md":
-      "See docs/harness/README.md and docs/architecture/README.md for repo guidance.\n",
+    "README.md": "See docs/harness/README.md and docs/architecture/README.md for repo guidance.\n",
     "package.json": JSON.stringify({
       scripts: {
         test: "vitest run",
@@ -121,18 +122,21 @@ describe("validateHarnessFiles", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm vitest run scripts/harnessRules.test.mjs`
 
-Expected: FAIL because `scripts/harnessRules.mjs` does not exist.
+Expected: FAIL because `scripts/harnessRules.mjs` does not exist. During
+execution, `vitest.config.ts` was first updated to include
+`scripts/**/*.test.mjs` so the targeted test was collected.
 
 ### Task 2: Implement Pure Harness Validation
 
 **Files:**
+
 - Create: `scripts/harnessRules.mjs`
 
-- [ ] **Step 1: Write minimal implementation**
+- [x] **Step 1: Write minimal implementation**
 
 ```js
 const REQUIRED_PATHS = [
@@ -209,7 +213,7 @@ export function validateHarnessFiles(files) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify green**
+- [x] **Step 2: Run tests to verify green**
 
 Run: `pnpm vitest run scripts/harnessRules.test.mjs`
 
@@ -218,9 +222,10 @@ Expected: PASS for all harness validator tests.
 ### Task 3: Add CLI Wrapper
 
 **Files:**
+
 - Create: `scripts/harness-check.mjs`
 
-- [ ] **Step 1: Implement CLI file loading and failure output**
+- [x] **Step 1: Implement CLI file loading and failure output**
 
 ```js
 #!/usr/bin/env node
@@ -246,7 +251,10 @@ const files = {};
 for (const path of paths) {
   const fullPath = join(root, path);
   if (!existsSync(fullPath)) continue;
-  files[path] = path === "docs/plans/active" || path === "docs/plans/completed" ? null : readFileSync(fullPath, "utf8");
+  files[path] =
+    path === "docs/plans/active" || path === "docs/plans/completed"
+      ? null
+      : readFileSync(fullPath, "utf8");
 }
 
 const failures = validateHarnessFiles(files);
@@ -259,7 +267,7 @@ if (failures.length > 0) {
 }
 ```
 
-- [ ] **Step 2: Run CLI before docs exist**
+- [x] **Step 2: Run CLI before docs exist**
 
 Run: `node scripts/harness-check.mjs`
 
@@ -268,6 +276,7 @@ Expected: FAIL with missing harness docs and scripts.
 ### Task 4: Add Harness Documentation
 
 **Files:**
+
 - Create: `AGENTS.md`
 - Create: `docs/harness/README.md`
 - Create: `docs/harness/quality-gates.md`
@@ -277,11 +286,11 @@ Expected: FAIL with missing harness docs and scripts.
 - Create: `docs/plans/active/.gitkeep`
 - Create: `docs/plans/completed/.gitkeep`
 
-- [ ] **Step 1: Add docs**
+- [x] **Step 1: Add docs**
 
 Use the approved design as the source of truth. Keep `AGENTS.md` below 120 lines and make every deeper rule discoverable from it.
 
-- [ ] **Step 2: Run harness check**
+- [x] **Step 2: Run harness check**
 
 Run: `node scripts/harness-check.mjs`
 
@@ -290,27 +299,31 @@ Expected: FAIL only for missing package scripts and README links.
 ### Task 5: Wire Package Scripts and README
 
 **Files:**
+
 - Modify: `package.json`
 - Modify: `README.md`
 
-- [ ] **Step 1: Update scripts**
+- [x] **Step 1: Update scripts**
 
 Set:
 
 ```json
 {
-  "test": "vitest run --include src/**/*.test.ts --include scripts/**/*.test.mjs",
+  "test": "vitest run",
   "harness:check": "node scripts/harness-check.mjs",
   "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm harness:check"
 }
 ```
 
-- [ ] **Step 2: Update README links**
+`vitest.config.ts` includes both `src/**/*.test.ts` and
+`scripts/**/*.test.mjs`.
+
+- [x] **Step 2: Update README links**
 
 Add a concise "Harness engineering" section pointing to `AGENTS.md`,
 `docs/harness/README.md`, and `docs/architecture/README.md`.
 
-- [ ] **Step 3: Run harness check**
+- [x] **Step 3: Run harness check**
 
 Run: `pnpm harness:check`
 
@@ -319,21 +332,22 @@ Expected: PASS with "Harness check passed."
 ### Task 6: Full Verification
 
 **Files:**
+
 - No new files.
 
-- [ ] **Step 1: Run full project verification**
+- [x] **Step 1: Run full project verification**
 
 Run: `pnpm verify`
 
 Expected: lint, typecheck, tests, and harness check all pass.
 
-- [ ] **Step 2: Review diff**
+- [x] **Step 2: Review diff**
 
 Run: `git diff --stat && git diff --check`
 
 Expected: no whitespace errors; diff limited to harness docs, scripts, package scripts, and README links.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 Run:
 

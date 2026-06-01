@@ -4,6 +4,17 @@ Node.js / TypeScript LiveKit AI Interview Agent worker. See
 [`livekit_ai_interview_agent_design_v3.md`](./livekit_ai_interview_agent_design_v3.md)
 for the full system design.
 
+## Harness engineering
+
+Agent-facing repository guidance starts in [`AGENTS.md`](./AGENTS.md). The
+harness operating model lives in
+[`docs/harness/README.md`](./docs/harness/README.md), and the current service
+architecture map lives in
+[`docs/architecture/README.md`](./docs/architecture/README.md).
+
+Run `pnpm verify` before committing implementation work. It runs linting,
+typechecking, tests, and the harness structure check.
+
 ## Status: Phase 1 — Walking skeleton (a talking interviewer)
 
 A minimal worker that joins a LiveKit room, seeds the interviewer from dispatch
