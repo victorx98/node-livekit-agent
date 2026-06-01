@@ -3,16 +3,21 @@ import { RoomEvent } from "@livekit/rtc-node";
 import { resolveJobConfig } from "./config/resolveConfig.js";
 import { buildInterviewInstructions } from "./interview/buildInstructions.js";
 import { assertProviderAllowed, createRealtimeModel } from "./providers/createRealtimeModel.js";
-import { jobTracker } from "./ops/jobTracker.js";
+import { createInitialState, appendTurn, type InterviewState } from "./interview/interviewState.js";
+import { chatRoleToTranscriptRole } from "./interview/transcriptStore.js";
+import { RedisJobTracker } from "./ops/jobTracker.js";
+import { getRedis } from "./state/redisClient.js";
+import { RedisStore } from "./state/redisStore.js";
 import { logger } from "./ops/logger.js";
 
-// Phase 1 walking skeleton: join the room, seed the interviewer, run the
-// realtime session, exit on room end. In-memory job tracker only — no Redis,
-// no recording, no reconnect/reseed (those are later hardening phases).
+// Phase 2: durable state. The worker joins the room, seeds the interviewer, runs
+// the realtime session, and writes interview state + transcript through to Redis
+// on every turn so a crash leaves recoverable state. Still no reconnect/reseed
+// (Phase 3) and no recording (later) — persistence only.
 
 export default defineAgent({
   prewarm: (_proc: JobProcess) => {
-    // Keep light. The realtime session is created per job in `entry`.
+    // Keep light. The realtime session and Redis store are created per job.
   },
 
   entry: async (ctx: JobContext): Promise<void> => {
@@ -27,16 +32,57 @@ export default defineAgent({
       room: ctx.room.name,
     });
 
-    await jobTracker.create(cfg.job_id, {
+    const roomName = ctx.room.name ?? cfg.job_id;
+    const store = new RedisStore(getRedis());
+    const tracker = new RedisJobTracker(store);
+
+    await tracker.create(cfg.job_id, {
       room: ctx.room.name,
       provider: cfg.model_provider,
       model: cfg.model,
       status: "starting",
     });
 
+    // Deterministic interview state, write-through to Redis from the start so a
+    // crash mid-interview leaves something to recover from.
+    let state: InterviewState = createInitialState({
+      jobId: cfg.job_id,
+      interviewId: cfg.interview_id,
+      questionCount: cfg.interview.questions.length,
+      now: new Date().toISOString(),
+    });
+    await store.saveInterviewState(state);
+
+    // Serialize Redis writes so concurrent turn events can't interleave a
+    // read-modify-write of the in-memory state. Write failures are logged, never
+    // swallowed silently, and must not abort the live interview.
+    let writeChain: Promise<void> = Promise.resolve();
+    const enqueueWrite = (fn: () => Promise<void>): void => {
+      writeChain = writeChain.then(fn).catch((err: unknown) => {
+        log.error({ event: "redis_write_failed", err }, "failed to persist turn");
+      });
+    };
+
+    const persistTurn = async (role: string, text: string, at: string): Promise<void> => {
+      const speaker = chatRoleToTranscriptRole(role);
+      await store.appendTranscript({
+        jobId: cfg.job_id,
+        interviewId: cfg.interview_id,
+        room: roomName,
+        role: speaker,
+        text,
+        at,
+      });
+      if (speaker === "interviewer" || speaker === "candidate") {
+        state = appendTurn(state, { role: speaker, text, at });
+        await store.saveInterviewState(state);
+        await tracker.update(cfg.job_id, { turns: state.stats.turns, lastActivityAt: at });
+      }
+    };
+
     try {
       await ctx.connect();
-      await jobTracker.update(cfg.job_id, { status: "connected" });
+      await tracker.update(cfg.job_id, { status: "connected" });
       log.info({ event: "room_connected" }, "agent connected to room");
 
       const instructions = buildInterviewInstructions(cfg);
@@ -51,15 +97,25 @@ export default defineAgent({
       const agent = new voice.Agent({ instructions });
       const session = new voice.AgentSession({ llm: model });
 
+      // Capture every conversation turn before starting, so the opening greeting
+      // is persisted too.
+      session.on(voice.AgentSessionEventTypes.ConversationItemAdded, (ev) => {
+        const item = ev.item;
+        if (item.type !== "message") return;
+        const text = item.textContent;
+        if (!text) return;
+        enqueueWrite(() => persistTurn(item.role, text, new Date(ev.createdAt).toISOString()));
+      });
+
       await session.start({ agent, room: ctx.room });
-      await jobTracker.update(cfg.job_id, {
+      await tracker.update(cfg.job_id, {
         status: "in_progress",
         lastActivityAt: new Date().toISOString(),
       });
       log.info({ event: "interview_started" }, "realtime session started");
 
       // Open the interview once the candidate is present. autoStart=false means
-      // the backend wants to gate the first turn on an external signal; Phase 1
+      // the backend wants to gate the first turn on an external signal; Phase 2
       // has no control channel, so we simply do not auto-greet in that case.
       if (cfg.options.autoStart) {
         ctx
@@ -77,20 +133,30 @@ export default defineAgent({
       log.info({ event: "interview_ended" }, "room ended or duration reached");
 
       await session.close();
-      await jobTracker.update(cfg.job_id, {
+      await writeChain; // drain pending turn writes before finalizing
+      await tracker.update(cfg.job_id, {
         status: "completed",
         endedAt: new Date().toISOString(),
       });
-      log.info({ event: "job_completed" }, "interview completed");
+      log.info({ event: "job_completed", turns: state.stats.turns }, "interview completed");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log.error({ event: "job_failed", err }, "interview job failed");
-      await jobTracker.update(cfg.job_id, {
+      await tracker.update(cfg.job_id, {
         status: "failed",
         error: message,
         endedAt: new Date().toISOString(),
       });
       throw err;
+    } finally {
+      // Apply the completion TTL so finished interviews stay inspectable then
+      // clean up. On a hard crash this never runs, so state persists for recovery.
+      await writeChain;
+      await store
+        .finalize(cfg.job_id)
+        .catch((err: unknown) =>
+          log.error({ event: "redis_write_failed", err }, "finalize failed"),
+        );
     }
   },
 });
@@ -98,8 +164,8 @@ export default defineAgent({
 /**
  * Resolve when the interview should end: the room disconnects, the last remote
  * participant (the candidate) leaves, or the duration ceiling is reached.
- * The ceiling is capped below the provider hard limit; in Phase 1 it is the
- * only safeguard (no reconnect).
+ * The ceiling is capped below the provider hard limit; in Phase 2 it is still
+ * the only safeguard (no reconnect).
  */
 function waitForRoomEndOrTimeout(ctx: JobContext, durationMinutes: number): Promise<void> {
   const maxMs = Math.min(durationMinutes, 59) * 60_000;

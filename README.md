@@ -15,41 +15,44 @@ architecture map lives in
 Run `pnpm verify` before committing implementation work. It runs linting,
 typechecking, tests, and the harness structure check.
 
-## Status: Phase 1 — Walking skeleton (a talking interviewer)
+## Status: Phase 2 — Durable state + transcript (Redis)
 
-A minimal worker that joins a LiveKit room, seeds the interviewer from dispatch
-metadata, runs an OpenAI realtime session, and exits on room end. This de-risks
-the hardest thing: LiveKit + realtime audio + the prompt actually conducting an
-autonomous spoken interview.
+The Phase 1 talking interviewer now persists. Interview state (deterministic:
+question progress, recent-turns ring buffer, stats) and the full transcript are
+written through to Redis on every turn, and the job tracker is Redis-backed, so
+job state survives a child-process crash. No reconnect/reseed yet — persistence
+only.
 
-**Implemented (Phase 1)**
+**Implemented (Phase 2)**
 
-- LiveKit worker launcher (`src/main.ts`) + agent job module (`src/agent.ts`).
-- Provider routing — OpenAI realtime wired, Gemini gated (§11/§15) — `src/providers/`.
-- Instruction builder (§12) — `src/interview/buildInstructions.ts`.
-- In-memory job tracker (§17 interface; no Redis) — `src/ops/jobTracker.ts`.
-- Dispatch helper for manual testing — `scripts/dispatch.mjs`.
+- Pure deterministic interview-state model + reducers — `src/interview/interviewState.ts`.
+- Transcript event shape + role mapping — `src/interview/transcriptStore.ts`.
+- Lazy Redis connection — `src/state/redisClient.ts`.
+- Durable store (only Redis-touching module) — `src/state/redisStore.ts`.
+- Redis-backed job tracker behind the existing interface — `src/ops/jobTracker.ts`.
+- Per-turn write-through wired into `src/agent.ts`.
 
-**From Phase 0 (still here)**
+**From earlier phases**
 
-- `AgentMetadata` wire contract (§8.1), `ResolvedJobConfig` (§8.2),
-  `resolveJobConfig` + zod validation (§8.3–§8.4), env loading (§7),
-  `pino` logger with secret redaction (§20–§21).
+- LiveKit worker + agent, OpenAI realtime (Gemini gated), instruction builder,
+  `AgentMetadata`→`ResolvedJobConfig` contract with zod validation, env loading,
+  `pino` logger with secret redaction.
 
-**Not yet** (later hardening phases): Redis state + transcript, reconnect/reseed,
-S3 recording/Egress, monitoring API, webhooks, telemetry, concurrency cap,
-graceful draining.
+**Not yet** (later phases): reconnect/reseed from the persisted state, S3
+recording/Egress, monitoring API, webhooks, telemetry, concurrency cap, graceful
+draining.
 
 > **API note:** the OpenAI realtime model id is **`gpt-realtime`** (voice
 > `marin`); the design doc's `gpt-realtime-2` does not exist in the installed
 > `@livekit/agents-plugin-openai@1.4.4`.
 
-## Run a live interview (Phase 1 verification)
+## Run a live interview (verification)
 
-Prerequisites: a LiveKit project (Cloud or self-hosted) and an OpenAI key.
+Prerequisites: a LiveKit project (Cloud or self-hosted), an OpenAI key, and a
+Redis instance (`REDIS_URL`, required from Phase 2 on).
 
 1. `cp .env.example .env` and fill in `LIVEKIT_URL`, `LIVEKIT_API_KEY`,
-   `LIVEKIT_API_SECRET`, and `OPENAI_API_KEY`.
+   `LIVEKIT_API_SECRET`, `OPENAI_API_KEY`, and `REDIS_URL`.
 2. Build and start the worker (registers under `AGENT_NAME`, default
    `interview-agent`):
    ```bash
@@ -64,6 +67,26 @@ Prerequisites: a LiveKit project (Cloud or self-hosted) and an OpenAI key.
 4. Open https://agents-playground.livekit.io/, connect **manually** with the
    printed server URL + candidate token, and start talking. The agent greets you
    and works through the dispatched questions.
+
+### Inspect durable state (Phase 2 acceptance)
+
+While an interview is running, watch state and transcript grow in Redis:
+
+```bash
+redis-cli KEYS 'iv:*'                      # interview state + transcript keys
+redis-cli LRANGE iv:<jobId>:transcript 0 -1
+redis-cli GET iv:<jobId>:state
+redis-cli SMEMBERS jobs                    # tracked job ids
+```
+
+Kill the worker child mid-call (e.g. `pkill -f dist/agent` or stop the process);
+the keys remain in Redis (no TTL is applied on a crash), so a future reseed can
+recover. `scripts/redis-smoke.mjs` exercises the same store against a real Redis
+without LiveKit if you want a quick, credential-free check:
+
+```bash
+REDIS_URL=redis://localhost:6379 node scripts/redis-smoke.mjs
+```
 
 ## Requirements
 

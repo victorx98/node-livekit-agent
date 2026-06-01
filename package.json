@@ -25,16 +25,19 @@
     "@livekit/agents": "^1.4.4",
     "@livekit/agents-plugin-openai": "^1.4.4",
     "@livekit/rtc-node": "^0.13.29",
+    "ioredis": "^5.11.0",
     "livekit-server-sdk": "^2.15.4",
     "pino": "^9.5.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",
+    "@types/ioredis-mock": "^8.2.7",
     "@types/node": "^22.9.0",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
     "eslint": "^9.15.0",
+    "ioredis-mock": "^8.13.1",
     "prettier": "^3.3.3",
     "typescript": "^5.6.3",
     "vitest": "^2.1.5"
