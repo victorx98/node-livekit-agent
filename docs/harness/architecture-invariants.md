@@ -40,6 +40,17 @@ import higher-level runtime modules. `providers`, `interview`, `recording`,
 - `src/ops/webhook.ts` builds the final-state payload (pure) and sends it with a
   bounded retry using injected `fetch`/`sleep`. It must never throw — webhook
   delivery runs during job teardown and cannot be allowed to mask the job result.
+- `src/ops/telemetry.ts` is the only module that imports OpenTelemetry. The rest
+  of the code depends on the `src/ops/metrics.ts` `Metrics` interface, never on
+  OTel directly, so instrumentation is testable with the fake and telemetry stays
+  optional (no-op when `OTEL_EXPORTER_OTLP_ENDPOINT` is unset).
+- `src/ops/loadFunc.ts` and `src/ops/readiness.ts` are pure. The monitoring API
+  keeps routing in the pure `src/ops/monitoring/handlers.ts`; only
+  `src/ops/monitoring/server.ts` touches `node:http`. The monitoring API must
+  stay private and must never expose transcripts.
+- `src/main.ts` owns process lifecycle: the concurrency cap wiring, signal
+  handling (drain readiness flip + backstop), telemetry, and the monitoring
+  server. Per-job behavior stays in `src/agent.ts` (the child process).
 - `src/state/redisStore.ts` is the only module that issues Redis commands.
   `src/state/redisClient.ts` owns the lazy connection. Other modules depend on
   `RedisStore` methods, never on `ioredis` directly.

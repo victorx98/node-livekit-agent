@@ -16,6 +16,8 @@ describe("loadEnv", () => {
       WEBHOOK_RETRY_BASE_MS: "2000",
       RECORDING_REQUIRED: "true",
       RECONNECT_MAX_RETRIES: "4",
+      MONITORING_PORT: "9090",
+      MONITORING_HOST: "127.0.0.1",
     });
 
     expect(env.nodeEnv).toBe("development");
@@ -30,6 +32,8 @@ describe("loadEnv", () => {
     expect(env.webhookRetryBaseMs).toBe(2000);
     expect(env.recordingRequired).toBe(true);
     expect(env.reconnectMaxRetries).toBe(4);
+    expect(env.monitoringPort).toBe(9090);
+    expect(env.monitoringHost).toBe("127.0.0.1");
   });
 
   it("applies documented defaults (§7) for an empty environment", () => {
@@ -47,6 +51,8 @@ describe("loadEnv", () => {
     expect(env.webhookRetryBaseMs).toBe(1000);
     expect(env.recordingRequired).toBe(false);
     expect(env.reconnectMaxRetries).toBe(3);
+    expect(env.monitoringPort).toBe(8080);
+    expect(env.monitoringHost).toBe("0.0.0.0");
   });
 
   it("exposes optional connection settings as undefined when unset", () => {

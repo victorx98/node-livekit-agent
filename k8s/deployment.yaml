@@ -1,0 +1,112 @@
+# Production Deployment for the LiveKit AI Interview Agent worker (§18–§20).
+#
+# Sizing (§18): replicas = ceil((P / C) * H), where P = peak SIMULTANEOUS
+# interviews, C = MAX_CONCURRENT_INTERVIEWS (found by load test), H = headroom.
+# Worked example P=40, C=8, H=1.3 -> ceil(6.5) = 7 replicas.
+#
+# Draining (§19): interviews run up to ~59 min, so the pod must be allowed to
+# finish in-flight interviews on rollout. terminationGracePeriodSeconds is the
+# real bound (the framework drains active jobs on SIGTERM, then exits);
+# DRAIN_TIMEOUT_SECONDS is the in-app backstop and must be < the grace period.
+# Dev/staging override both to small values for fast iteration (see comments).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: interview-agent
+  labels:
+    app: interview-agent
+spec:
+  replicas: 7 # = ceil((P/C)*H); recompute from your load test
+  selector:
+    matchLabels:
+      app: interview-agent
+  strategy:
+    rollingUpdate:
+      # Never take a replica down before its replacement is ready, and add at
+      # most one at a time, so capacity holds during the long drain.
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: interview-agent
+    spec:
+      # PROD: > max interview (59m) + margin. DEV/STAGING: 60.
+      terminationGracePeriodSeconds: 4200 # 70 min
+      containers:
+        - name: interview-agent
+          image: ghcr.io/victorx98/node-livekit-agent:latest
+          imagePullPolicy: IfNotPresent
+          args: ["node", "dist/main.js", "start"]
+          ports:
+            - name: monitoring
+              containerPort: 8080
+            - name: lk-health
+              containerPort: 8081
+          env:
+            # PROD: 65 min (> max interview, < terminationGracePeriodSeconds).
+            # DEV/STAGING: "30".
+            - name: DRAIN_TIMEOUT_SECONDS
+              value: "3900"
+            - name: MAX_CONCURRENT_INTERVIEWS
+              value: "8" # = C from the load test
+            - name: NUM_IDLE_PROCESSES
+              value: "3"
+            - name: MONITORING_PORT
+              value: "8080"
+            - name: NODE_ENV
+              value: "production"
+            - name: LOG_LEVEL
+              value: "info"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.observability.svc:4318"
+            - name: SERVICE_NAME
+              value: "livekit-ai-interview-agent"
+          envFrom:
+            # Non-secret tuning (DEFAULT_VOICE, TURN_DETECTION, RECORDING_*, ...).
+            - configMapRef:
+                name: interview-agent-config
+            # Secrets: LIVEKIT_*, OPENAI_API_KEY, AWS_*, REDIS_URL, WEBHOOK_URL.
+            - secretRef:
+                name: interview-agent-secrets
+          # Liveness stays up during draining (process is healthy, just not
+          # accepting new jobs); readiness flips to 503 on SIGTERM so the LB
+          # drains this replica (§19).
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: monitoring
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: monitoring
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            # Voice jobs are memory-bound: size for C child processes + the
+            # supervisor; CPU for C audio pipelines. Tune from the load test.
+            requests:
+              cpu: "2"
+              memory: "2Gi"
+            limits:
+              cpu: "4"
+              memory: "4Gi"
+---
+# Internal-only service for probes/observability scrapes and the control plane.
+# Private by default (§20): ClusterIP, not exposed publicly.
+apiVersion: v1
+kind: Service
+metadata:
+  name: interview-agent
+  labels:
+    app: interview-agent
+spec:
+  type: ClusterIP
+  selector:
+    app: interview-agent
+  ports:
+    - name: monitoring
+      port: 8080
+      targetPort: monitoring

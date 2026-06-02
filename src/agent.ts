@@ -20,6 +20,7 @@ import { resolveRecordingFilepath } from "./recording/recordingPlan.js";
 import { LiveKitEgressGateway } from "./recording/egressGateway.js";
 import { createS3Preflight } from "./recording/s3Preflight.js";
 import { sendWebhook, type WebhookEvent } from "./ops/webhook.js";
+import { getChildMetrics } from "./ops/telemetry.js";
 
 // Phase 4: recording + final webhook. On top of Phase 3 (reconnect + reseed),
 // the worker runs an S3 preflight and starts a LiveKit Egress before the
@@ -34,9 +35,14 @@ export default defineAgent({
   },
 
   entry: async (ctx: JobContext): Promise<void> => {
+    const jobStartMs = Date.now();
     const cfg = resolveJobConfig(ctx.job?.metadata ?? "{}", ctx.job?.id ?? ctx.room.name);
     assertProviderAllowed(cfg); // OpenAI passes; unverified Gemini is rejected (§15)
     const env = loadEnv();
+
+    // Per-process metrics (§20); started once per child and reused across jobs.
+    const metrics = await getChildMetrics(env.serviceName, env.otelExporterOtlpEndpoint);
+    const jobLabels = { provider: cfg.model_provider, model: cfg.model };
 
     const log = logger.child({
       job_id: cfg.job_id,
@@ -56,6 +62,7 @@ export default defineAgent({
       model: cfg.model,
       status: "starting",
     });
+    metrics.jobStarted(jobLabels);
 
     // Deterministic interview state shared across reconnects, write-through to
     // Redis so a reseed (or crash-and-retry) can rebuild context.
@@ -74,6 +81,7 @@ export default defineAgent({
     const enqueueWrite = (fn: () => Promise<void>): void => {
       writeChain = writeChain.then(fn).catch((err: unknown) => {
         log.error({ event: "redis_write_failed", err }, "failed to persist state");
+        metrics.redisWriteFailed();
       });
     };
 
@@ -145,6 +153,8 @@ export default defineAgent({
         egressId: recording.egressId,
         recording: recording.status,
       });
+      if (recording.status === "active") metrics.recordingStarted();
+      else if (recording.status === "failed") metrics.recordingStartFailed();
 
       // One promise bounds the whole interview (room end or duration cap),
       // independent of how many realtime sessions are spun up by reconnects.
@@ -232,6 +242,7 @@ export default defineAgent({
           });
           await writeChain; // ensure the bumped state is persisted before reseed reads it
           await tracker.update(cfg.job_id, { status: "reconnecting", reconnects: attempt });
+          metrics.providerReconnect(jobLabels);
         },
         maxReconnects: env.reconnectMaxRetries,
         log,
@@ -246,6 +257,8 @@ export default defineAgent({
         endedAt: new Date().toISOString(),
       });
       finalEvent = "job_completed";
+      metrics.jobCompleted(jobLabels);
+      metrics.jobDurationSeconds((Date.now() - jobStartMs) / 1000, jobLabels);
       log.info(
         { event: "job_completed", turns: state.stats.turns, reconnects: state.stats.reconnects },
         "interview completed",
@@ -258,6 +271,7 @@ export default defineAgent({
         error: message,
         endedAt: new Date().toISOString(),
       });
+      metrics.jobFailed({ ...jobLabels, reason: classifyFailure(message) });
       throw err;
     } finally {
       await writeChain;
@@ -285,7 +299,7 @@ export default defineAgent({
       // Best-effort: sendWebhook never throws, so it cannot mask the job result.
       const finalRecord = await tracker.get(cfg.job_id);
       if (finalRecord) {
-        await sendWebhook({
+        const delivery = await sendWebhook({
           url: env.webhookUrl,
           event: finalEvent,
           record: finalRecord,
@@ -295,10 +309,24 @@ export default defineAgent({
           sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
           log,
         });
+        if (!delivery.delivered && !delivery.skipped) metrics.webhookFailed();
       }
     }
   },
 });
+
+/**
+ * Coarse failure reason for the interview_jobs_failed_total metric label. Kept
+ * low-cardinality on purpose — full messages go to logs, not metric labels.
+ */
+function classifyFailure(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("reconnect attempts exhausted")) return "reconnect_exhausted";
+  if (m.includes("s3 preflight") || m.includes("recording")) return "recording";
+  if (m.includes("gemini")) return "provider_gated";
+  if (m.includes("redis")) return "redis";
+  return "error";
+}
 
 /**
  * Resolve when the interview should end: the room disconnects, the last remote

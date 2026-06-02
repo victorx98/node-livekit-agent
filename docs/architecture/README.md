@@ -1,10 +1,10 @@
 # Architecture
 
 This repository implements a Node.js/TypeScript LiveKit AI interview agent.
-Phase 4 adds recording + a final-state webhook on top of reconnect + reseed: the
-interview records to S3 via LiveKit Egress (after an S3 preflight, with a
-required-vs-degrade policy), and exactly one `job_completed`/`job_failed` webhook
-is emitted at the end with a bounded retry.
+Phase 5 adds the production-ops layer: an explicit per-worker concurrency cap, a
+drain-aware shutdown, OpenTelemetry metrics/traces, and a small internal
+monitoring API — on top of recording + webhook, reconnect + reseed, and durable
+state.
 
 ## Runtime Flow
 
@@ -12,7 +12,11 @@ is emitted at the end with a bounded retry.
 External backend
   -> LiveKit dispatch metadata
   -> LiveKit worker process (`src/main.ts`)
-  -> job entrypoint (`src/agent.ts`)
+       -> concurrency cap (`src/ops/loadFunc.ts`) + drain readiness
+          (`src/ops/readiness.ts`) + telemetry (`src/ops/telemetry.ts`)
+       -> monitoring API on its own port (`src/ops/monitoring/server.ts`
+          -> `src/ops/monitoring/handlers.ts`)
+  -> job entrypoint (`src/agent.ts`)  [child process; emits per-job metrics]
   -> config resolver (`src/config/resolveConfig.ts`)
   -> prompt builder (`src/interview/buildInstructions.ts`)
   -> provider router (`src/providers/createRealtimeModel.ts`)
@@ -63,6 +67,15 @@ recap from durable state, up to `RECONNECT_MAX_RETRIES`.
   -> DeleteObject preflight).
 - `src/ops/webhook.ts`: pure final-state payload builder + bounded-retry sender
   (built-in `fetch`, injected for tests); never throws.
+- `src/ops/loadFunc.ts`: pure per-worker load ratio + threshold (concurrency
+  cap) and the `ServerOptions.loadFunc` builder.
+- `src/ops/readiness.ts`: pure drain-aware readiness state.
+- `src/ops/metrics.ts`: the `Metrics` instrument interface, a no-op default,
+  and a counting fake for tests.
+- `src/ops/telemetry.ts`: the only OpenTelemetry module — builds an OTLP-backed
+  `Metrics` (dynamic import, started only when configured) and worker gauges.
+- `src/ops/monitoring/handlers.ts`: pure request->`{status, body}` routing for
+  the monitoring API; `src/ops/monitoring/server.ts`: thin `node:http` binding.
 - `src/state/redisClient.ts`: lazy process-wide ioredis connection.
 - `src/state/redisStore.ts`: the only Redis-touching module — interview state,
   transcript, and job-record persistence plus finalize TTL.
@@ -89,16 +102,22 @@ recap from durable state, up to `RECONNECT_MAX_RETRIES`.
   One final-state webhook (`job_completed`/`job_failed`) is emitted with a
   bounded retry; in-interview progress events and at-least-once delivery are
   deferred.
-- Monitoring API, telemetry, concurrency caps, and graceful draining are
-  deferred.
+- Production ops are implemented: an explicit per-worker concurrency cap
+  (`loadFunc` + `loadThreshold`, capped at `MAX_CONCURRENT_INTERVIEWS`), a
+  drain-aware readiness flip on SIGTERM with an env-bounded backstop (the
+  framework drains active interviews), OpenTelemetry metrics/traces over OTLP,
+  and an internal monitoring API (`/healthz`, `/readyz`, `/jobs`, `/jobs/:id`,
+  `POST /jobs/:id/cancel`). Cross-process enforcement of a cancel request (the
+  child ending its interview) is deferred — cancel records intent only.
 - `resolveJobConfig`, the interview state/transcript/reseed models, the
-  ContextManager loop, the recording controller, and the webhook sender are
-  intentionally pure or injected-effect so they can be tested without LiveKit,
-  AWS, or Redis runtime dependencies.
+  ContextManager loop, the recording controller, the webhook sender, the load
+  function, readiness, and the monitoring handlers are intentionally pure or
+  injected-effect so they can be tested without LiveKit, AWS, OTel, or Redis.
 
 ## Extension Points
 
-- Add monitoring and load management under `src/ops/`.
+- Wire cancel enforcement (child observes the `cancelled` marker and ends the
+  interview) under `src/agent.ts` + the tracker.
 - Add provider implementations under `src/providers/`, keeping duration gates
   and capability checks explicit.
 

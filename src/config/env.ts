@@ -38,6 +38,10 @@ export interface Env {
   // recording policy (§16)
   recordingRequired: boolean;
 
+  // monitoring API (§20); separate port from the framework health server (8081)
+  monitoringPort: number;
+  monitoringHost: string;
+
   // optional connection settings (wired in later phases)
   livekitUrl?: string;
   livekitApiKey?: string;
@@ -97,6 +101,9 @@ export function loadEnv(source: EnvSource = process.env): Env {
     reconnectMaxRetries: intOr(source, "RECONNECT_MAX_RETRIES", 3),
 
     recordingRequired: boolOr(source, "RECORDING_REQUIRED", false),
+
+    monitoringPort: intOr(source, "MONITORING_PORT", 8080),
+    monitoringHost: strOr(source, "MONITORING_HOST", "0.0.0.0"),
 
     livekitUrl: str(source, "LIVEKIT_URL"),
     livekitApiKey: str(source, "LIVEKIT_API_KEY"),

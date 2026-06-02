@@ -15,44 +15,52 @@ architecture map lives in
 Run `pnpm verify` before committing implementation work. It runs linting,
 typechecking, tests, and the harness structure check.
 
-## Status: Phase 4 — Recording + final webhook
+## Status: Phase 5 — Production ops: concurrency, shutdown, observability
 
-The interview now records to S3 and reports its final state. Before the
-interview the worker runs an **S3 preflight** (HeadBucket → PutObject → Delete)
-and starts a **LiveKit Room Composite Egress** that writes an MP4 (or OGG when
-audio-only) to the backend-supplied `recordingKey`. The **required-vs-degrade**
-policy comes from `RECORDING_REQUIRED`: when required, a recording failure fails
-the job *before* the interview starts; when not required, it is logged, the
-recording is marked `failed`, and the interview continues. At the end, exactly
-one **final-state webhook** (`job_completed` / `job_failed`) is sent with a
-bounded retry; delivery is best-effort and never crashes teardown.
+The parent worker now runs safely in production. An explicit **per-worker
+concurrency cap** (`loadFunc` + `loadThreshold`) makes a replica report "full"
+at `MAX_CONCURRENT_INTERVIEWS` instead of drifting on CPU. On **SIGTERM** the
+replica flips `/readyz` to 503 (so the load balancer drains it) while the
+framework lets live interviews finish; an env-bounded backstop
+(`DRAIN_TIMEOUT_SECONDS`) forces exit only if draining overruns.
+**OpenTelemetry** metrics/traces ship over OTLP (started only when
+`OTEL_EXPORTER_OTLP_ENDPOINT` is set), and a small internal **monitoring API**
+(`/healthz`, `/readyz`, `/jobs`, `/jobs/:id`, `POST /jobs/:id/cancel`) runs on
+its own port (`MONITORING_PORT`, default 8080; the framework's own health server
+is on 8081). A production **K8s manifest** lives in `k8s/`.
 
-**Implemented (Phase 4)**
+**Implemented (Phase 5)**
 
-- Pure Egress filepath resolver — `src/recording/recordingPlan.ts`.
-- Recording controller owning the required-vs-degrade policy + safe stop,
-  injected-effect — `src/recording/recorder.ts`.
-- Thin LiveKit Egress adapter — `src/recording/egressGateway.ts`; thin S3
-  preflight adapter (`@aws-sdk/client-s3`) — `src/recording/s3Preflight.ts`.
-- Pure webhook payload builder + bounded-retry sender (built-in `fetch`) —
-  `src/ops/webhook.ts`.
-- Wired into `src/agent.ts`: start recording after connect, stop egress on
-  teardown, emit one final-state webhook from the durable job record.
+- Pure concurrency cap — `src/ops/loadFunc.ts`; drain readiness —
+  `src/ops/readiness.ts`.
+- Metrics interface + no-op + fake — `src/ops/metrics.ts`; OTel adapter (the only
+  OTel importer, dynamic + optional) — `src/ops/telemetry.ts`.
+- Monitoring API: pure handlers — `src/ops/monitoring/handlers.ts`; thin
+  `node:http` server — `src/ops/monitoring/server.ts`.
+- `src/main.ts` wires the cap, telemetry, monitoring server, and the SIGTERM
+  drain readiness flip + backstop; `src/agent.ts` emits per-job metrics.
+- Final `Dockerfile` (exec form, both ports, healthcheck) + `k8s/deployment.yaml`.
+
+> **Cancel is intent-only:** `POST /jobs/:id/cancel` records `status: cancelled`
+> on the job and returns 202. Cross-process enforcement (the running child
+> observing the marker and ending the interview) is deferred.
 
 **From earlier phases**
 
-- Reconnect + reseed via the ContextManager (transient drops handled by the
-  OpenAI plugin; fatal closes reseeded from the durable Redis recap, up to
-  `RECONNECT_MAX_RETRIES`).
-- LiveKit worker + agent, OpenAI realtime (Gemini gated), instruction builder,
-  durable Redis state + transcript + job tracker, the
-  `AgentMetadata`→`ResolvedJobConfig` contract, env loading, redacting logger.
-- Duration cap (`min(durationMins, 59)`) and the `assertProviderAllowed` Gemini
-  gate bound every run.
+- **Phase 4** — recording to S3 via LiveKit Egress (S3 preflight,
+  required-vs-degrade per `RECORDING_REQUIRED`) and one final-state webhook
+  (`job_completed`/`job_failed`) with bounded retry.
+- **Phase 3** — reconnect + reseed via the ContextManager (transient drops
+  handled by the OpenAI plugin; fatal closes reseeded from the durable Redis
+  recap, up to `RECONNECT_MAX_RETRIES`).
+- **Phases 0–2** — LiveKit worker + agent, OpenAI realtime (Gemini gated),
+  instruction builder, durable Redis state + transcript + Redis-backed job
+  tracker, the `AgentMetadata`→`ResolvedJobConfig` contract, env loading,
+  redacting logger. Duration cap (`min(durationMins, 59)`) and the
+  `assertProviderAllowed` Gemini gate bound every run.
 
-**Not yet** (later phases): proactive session rotation (no-op hook), monitoring
-API, in-interview webhook progress events, telemetry, concurrency cap, graceful
-draining.
+**Not yet** (later phases): proactive session rotation (no-op hook),
+in-interview webhook progress events, cancel enforcement in the child.
 
 > **API note:** the OpenAI realtime model id is **`gpt-realtime`** (voice
 > `marin`); the design doc's `gpt-realtime-2` does not exist in the installed
@@ -139,6 +147,40 @@ Live (needs AWS + LiveKit creds, and a webhook endpoint): set `AWS_REGION`,
   **fails before the interview** and you get a `job_failed` webhook. With
   `RECORDING_REQUIRED=false` the same break logs `recording_failed` and the
   interview proceeds without a recording.
+
+### Production ops (Phase 5 acceptance)
+
+The concurrency math, readiness, monitoring routes, and metrics fake are proven
+by **credential-free unit/integration tests** (the monitoring server runs over a
+real ephemeral port):
+
+```bash
+pnpm test src/ops/loadFunc.test.ts src/ops/readiness.test.ts \
+          src/ops/metrics.test.ts src/ops/monitoring
+```
+
+The monitoring API is live as soon as the worker starts (no LiveKit needed for
+the endpoints themselves):
+
+```bash
+curl localhost:8080/healthz      # {"status":"ok"}
+curl localhost:8080/readyz       # {"status":"ready"} -> 503 {"status":"draining"} after SIGTERM
+curl localhost:8080/jobs         # active + recent jobs from the Redis-backed tracker
+```
+
+Live (operator):
+
+- **Find the real cap `C`:** raise `MAX_CONCURRENT_INTERVIEWS`, run concurrent
+  real audio sessions, and watch per-child memory; the worker reports "full" at
+  the cap (load ratio hits 1.0). Size replicas with `ceil((P / C) * H)` (§18).
+- **Drain, don't kill:** send `SIGTERM` (or `kubectl rollout restart`) mid-call.
+  `/readyz` flips to 503 immediately, the log shows `worker_drain_started`, and
+  the **live interview keeps going** until it finishes (bounded by
+  `terminationGracePeriodSeconds` / `DRAIN_TIMEOUT_SECONDS`).
+- **Metrics in Grafana:** point `OTEL_EXPORTER_OTLP_ENDPOINT` at your collector
+  and confirm `interview_jobs_started_total`, `interview_duration_seconds`,
+  `worker_load_ratio`, etc. appear. Apply `k8s/deployment.yaml` for the prod
+  rollout/drain settings.
 
 ## Requirements
 

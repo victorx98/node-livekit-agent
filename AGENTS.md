@@ -16,14 +16,15 @@ of truth lives in the linked docs.
 
 ## Project Shape
 
-This is a Node.js/TypeScript LiveKit AI interview agent service. Phase 4: the
+This is a Node.js/TypeScript LiveKit AI interview agent service. Phase 5: the
 worker resolves dispatch metadata, joins a LiveKit room, records to S3 via
-LiveKit Egress (after an S3 preflight, required-vs-degrade per
-`RECORDING_REQUIRED`), and runs the interview through a ContextManager that
-reconnects + reseeds from durable Redis state when a realtime session fails
-fatally. State + transcript are written through to Redis every turn; the job
-tracker is Redis-backed; one final-state webhook is emitted at the end.
-`REDIS_URL` is required.
+LiveKit Egress (S3 preflight, required-vs-degrade per `RECORDING_REQUIRED`), and
+runs the interview through a ContextManager that reconnects + reseeds from
+durable Redis state on fatal session failure. State + transcript are written
+through to Redis every turn; the job tracker is Redis-backed; one final-state
+webhook is emitted at the end. The parent worker enforces a per-worker
+concurrency cap, drains on SIGTERM, exports OpenTelemetry metrics/traces, and
+serves an internal monitoring API. `REDIS_URL` is required.
 
 Core code paths:
 
@@ -36,8 +37,11 @@ Core code paths:
 - `src/recording/`: recording controller (required-vs-degrade policy) plus thin
   LiveKit Egress and S3-preflight adapters.
 - `src/state/`: Redis connection and the durable store (only Redis-touching code).
-- `src/ops/`: logging, job tracking, and the final-state webhook.
+- `src/ops/`: logging, job tracking, the final-state webhook, the concurrency
+  load function, drain readiness, the metrics interface + OTel adapter, and the
+  `monitoring/` API (pure handlers + node:http server).
 - `src/types/`: shared TypeScript contracts.
+- `k8s/`: production Deployment + Service manifest (`Dockerfile` at the root).
 
 ## Working Rules
 
