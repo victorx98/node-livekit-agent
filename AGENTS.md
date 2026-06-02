@@ -16,11 +16,14 @@ of truth lives in the linked docs.
 
 ## Project Shape
 
-This is a Node.js/TypeScript LiveKit AI interview agent service. Phase 3: the
-worker resolves dispatch metadata, joins a LiveKit room, and runs the interview
-through a ContextManager that reconnects + reseeds from durable Redis state when
-a realtime session fails fatally. State + transcript are written through to Redis
-every turn; the job tracker is Redis-backed. `REDIS_URL` is required.
+This is a Node.js/TypeScript LiveKit AI interview agent service. Phase 4: the
+worker resolves dispatch metadata, joins a LiveKit room, records to S3 via
+LiveKit Egress (after an S3 preflight, required-vs-degrade per
+`RECORDING_REQUIRED`), and runs the interview through a ContextManager that
+reconnects + reseeds from durable Redis state when a realtime session fails
+fatally. State + transcript are written through to Redis every turn; the job
+tracker is Redis-backed; one final-state webhook is emitted at the end.
+`REDIS_URL` is required.
 
 Core code paths:
 
@@ -30,8 +33,10 @@ Core code paths:
 - `src/providers/`: realtime provider routing + Gemini gate.
 - `src/interview/`: prompt construction, pure state/transcript/reseed models, and
   the reconnect/reseed ContextManager.
+- `src/recording/`: recording controller (required-vs-degrade policy) plus thin
+  LiveKit Egress and S3-preflight adapters.
 - `src/state/`: Redis connection and the durable store (only Redis-touching code).
-- `src/ops/`: logging and job tracking.
+- `src/ops/`: logging, job tracking, and the final-state webhook.
 - `src/types/`: shared TypeScript contracts.
 
 ## Working Rules

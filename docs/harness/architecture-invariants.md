@@ -5,13 +5,14 @@ These rules keep the service legible as agents add features.
 ## Current Layering
 
 ```text
-types -> config -> providers/interview/ops/state -> agent -> main
+types -> config -> providers/interview/recording/ops/state -> agent -> main
 ```
 
 The arrows show allowed knowledge direction. Lower-level modules should not
-import higher-level runtime modules. `providers`, `interview`, `ops`, and
-`state` are peers; sibling imports are allowed but should stay minimal (e.g. the
-Redis-backed job tracker in `ops` delegates persistence to `state/redisStore`).
+import higher-level runtime modules. `providers`, `interview`, `recording`,
+`ops`, and `state` are peers; sibling imports are allowed but should stay minimal
+(e.g. the Redis-backed job tracker in `ops` delegates persistence to
+`state/redisStore`).
 
 ## Boundary Rules
 
@@ -28,6 +29,17 @@ Redis-backed job tracker in `ops` delegates persistence to `state/redisStore`).
   no I/O directly — it depends only on injected effects (a session factory, a
   reconnect callback, a logger) so the loop stays unit-testable with fault
   injection. It must not import LiveKit or Redis.
+- `src/recording/recorder.ts` is the recording controller and owns the
+  required-vs-degrade policy. Like `contextManager`, it performs no I/O directly
+  — it depends only on injected effects (an S3 preflight thunk and an
+  `EgressGateway`) and must not import LiveKit or the AWS SDK.
+  `src/recording/recordingPlan.ts` is pure (filepath/extension resolution).
+- `src/recording/egressGateway.ts` is the only module that calls the LiveKit
+  Egress API; `src/recording/s3Preflight.ts` is the only module that calls S3.
+  These are thin adapters with no policy; they are verified live, not unit-tested.
+- `src/ops/webhook.ts` builds the final-state payload (pure) and sends it with a
+  bounded retry using injected `fetch`/`sleep`. It must never throw — webhook
+  delivery runs during job teardown and cannot be allowed to mask the job result.
 - `src/state/redisStore.ts` is the only module that issues Redis commands.
   `src/state/redisClient.ts` owns the lazy connection. Other modules depend on
   `RedisStore` methods, never on `ioredis` directly.

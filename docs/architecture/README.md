@@ -1,9 +1,10 @@
 # Architecture
 
 This repository implements a Node.js/TypeScript LiveKit AI interview agent.
-Phase 3 adds reconnect + reseed on top of durable state: the interview runs
-through a ContextManager that opens a fresh realtime session reseeded from the
-Redis recap when a session fails fatally, so context is never lost.
+Phase 4 adds recording + a final-state webhook on top of reconnect + reseed: the
+interview records to S3 via LiveKit Egress (after an S3 preflight, with a
+required-vs-degrade policy), and exactly one `job_completed`/`job_failed` webhook
+is emitted at the end with a bounded retry.
 
 ## Runtime Flow
 
@@ -15,12 +16,15 @@ External backend
   -> config resolver (`src/config/resolveConfig.ts`)
   -> prompt builder (`src/interview/buildInstructions.ts`)
   -> provider router (`src/providers/createRealtimeModel.ts`)
+  -> recording: S3 preflight + LiveKit Egress (`src/recording/recorder.ts`
+       -> `src/recording/s3Preflight.ts` + `src/recording/egressGateway.ts`)
   -> reconnect controller (`src/interview/contextManager.ts`)
        -> realtime voice session (rebuilt + reseeded on fatal failure from
           `src/interview/reseed.ts` using durable state)
        -> per turn: deterministic state (`src/interview/interviewState.ts`)
           + transcript write-through to Redis (`src/state/redisStore.ts`)
   -> Redis-backed job tracker (`src/ops/jobTracker.ts` -> `src/state/redisStore.ts`)
+  -> teardown: stop egress + one final-state webhook (`src/ops/webhook.ts`)
 ```
 
 The OpenAI plugin reconnects transient socket drops itself (replaying in-memory
@@ -48,6 +52,17 @@ recap from durable state, up to `RECONNECT_MAX_RETRIES`.
   rotation hook.
 - `src/providers/createRealtimeModel.ts`: gates providers and creates OpenAI
   realtime models.
+- `src/recording/recordingPlan.ts`: pure resolver for the Egress filepath from
+  `recordingKey` (and the file extension from `audio_only`).
+- `src/recording/recorder.ts`: recording controller — owns the
+  required-vs-degrade policy and safe stop; driven by an injected S3 preflight
+  thunk and EgressGateway (no LiveKit/AWS imports).
+- `src/recording/egressGateway.ts`: the only LiveKit Egress adapter (Room
+  Composite to S3).
+- `src/recording/s3Preflight.ts`: the only S3 adapter (HeadBucket -> PutObject
+  -> DeleteObject preflight).
+- `src/ops/webhook.ts`: pure final-state payload builder + bounded-retry sender
+  (built-in `fetch`, injected for tests); never throws.
 - `src/state/redisClient.ts`: lazy process-wide ioredis connection.
 - `src/state/redisStore.ts`: the only Redis-touching module — interview state,
   transcript, and job-record persistence plus finalize TTL.
@@ -69,16 +84,20 @@ recap from durable state, up to `RECONNECT_MAX_RETRIES`.
   rotation of a healthy session is deferred (no-op hook in the ContextManager).
 - The duration cap (`min(durationMins, 59)`) and the `assertProviderAllowed`
   Gemini gate bound every run.
-- Recording, monitoring API, webhooks, telemetry, concurrency caps, and graceful
-  draining are deferred.
-- `resolveJobConfig`, the interview state/transcript/reseed models, and the
-  ContextManager loop are intentionally pure or injected-effect so they can be
-  tested without LiveKit or Redis runtime dependencies.
+- Recording to S3 via LiveKit Egress is implemented, gated by
+  `enableRecording` with a required-vs-degrade policy from `RECORDING_REQUIRED`.
+  One final-state webhook (`job_completed`/`job_failed`) is emitted with a
+  bounded retry; in-interview progress events and at-least-once delivery are
+  deferred.
+- Monitoring API, telemetry, concurrency caps, and graceful draining are
+  deferred.
+- `resolveJobConfig`, the interview state/transcript/reseed models, the
+  ContextManager loop, the recording controller, and the webhook sender are
+  intentionally pure or injected-effect so they can be tested without LiveKit,
+  AWS, or Redis runtime dependencies.
 
 ## Extension Points
 
-- Add recording under a dedicated `src/recording/` module so LiveKit egress and
-  S3 policy stay separate from `src/agent.ts`.
 - Add monitoring and load management under `src/ops/`.
 - Add provider implementations under `src/providers/`, keeping duration gates
   and capability checks explicit.

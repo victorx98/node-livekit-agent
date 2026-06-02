@@ -15,13 +15,18 @@ import { RedisJobTracker } from "./ops/jobTracker.js";
 import { getRedis } from "./state/redisClient.js";
 import { RedisStore } from "./state/redisStore.js";
 import { logger } from "./ops/logger.js";
+import { Recorder, type RecordingResult } from "./recording/recorder.js";
+import { resolveRecordingFilepath } from "./recording/recordingPlan.js";
+import { LiveKitEgressGateway } from "./recording/egressGateway.js";
+import { createS3Preflight } from "./recording/s3Preflight.js";
+import { sendWebhook, type WebhookEvent } from "./ops/webhook.js";
 
-// Phase 3: reconnect + reseed. The worker joins the room and runs the interview
-// through a ContextManager. The OpenAI plugin transparently reconnects transient
-// socket drops (replaying its in-memory context); when a session fails fatally
-// (AgentSession closes with CloseReason.ERROR) the ContextManager opens a fresh
-// session reseeded from the durable Redis recap and continues, up to a retry
-// cap. Interview state + transcript are still written through to Redis per turn.
+// Phase 4: recording + final webhook. On top of Phase 3 (reconnect + reseed),
+// the worker runs an S3 preflight and starts a LiveKit Egress before the
+// interview (required-vs-degrade per RECORDING_REQUIRED, §16), stops the egress
+// on teardown, and emits exactly one final-state webhook — job_completed or
+// job_failed — with a bounded retry (§17). Webhook delivery never crashes
+// teardown. The Phase 3 ContextManager + per-turn Redis write-through are intact.
 
 export default defineAgent({
   prewarm: (_proc: JobProcess) => {
@@ -89,10 +94,57 @@ export default defineAgent({
       }
     };
 
+    // Recording (§16). The Recorder owns the required-vs-degrade policy; the
+    // S3/LiveKit I/O lives behind injected adapters. Built up front so teardown
+    // (in `finally`) can stop the egress regardless of how the job ended.
+    const filepath = resolveRecordingFilepath(cfg);
+    const recorder = new Recorder({
+      plan: {
+        enabled: cfg.recording.enabled,
+        required: cfg.recording.required,
+        filepath,
+        audioOnly: cfg.recording.audio_only,
+      },
+      roomName,
+      preflight: createS3Preflight({
+        region: env.awsRegion ?? cfg.recording.s3_region,
+        accessKeyId: env.awsAccessKeyId ?? "",
+        secretAccessKey: env.awsSecretAccessKey ?? "",
+        bucket: cfg.recording.s3_bucket,
+        key: filepath,
+      }),
+      gateway: new LiveKitEgressGateway({
+        livekitUrl: env.livekitUrl ?? "",
+        livekitApiKey: env.livekitApiKey ?? "",
+        livekitApiSecret: env.livekitApiSecret ?? "",
+        s3: {
+          accessKeyId: env.awsAccessKeyId ?? "",
+          secretAccessKey: env.awsSecretAccessKey ?? "",
+          bucket: cfg.recording.s3_bucket,
+          region: env.awsRegion ?? cfg.recording.s3_region,
+        },
+      }),
+      log,
+    });
+    let recording: RecordingResult = { status: "disabled" };
+
+    // Final-state webhook event (§17). Default to failed; only the clean
+    // completion path flips it to job_completed. Emitted once, in `finally`.
+    let finalEvent: WebhookEvent = "job_failed";
+
     try {
       await ctx.connect();
       await tracker.update(cfg.job_id, { status: "connected" });
       log.info({ event: "room_connected" }, "agent connected to room");
+
+      // Preflight + start recording before the interview. When recording is
+      // required this throws on failure (caught below -> job_failed); otherwise
+      // it degrades to "failed" and the interview continues without a recording.
+      recording = await recorder.start();
+      await tracker.update(cfg.job_id, {
+        egressId: recording.egressId,
+        recording: recording.status,
+      });
 
       // One promise bounds the whole interview (room end or duration cap),
       // independent of how many realtime sessions are spun up by reconnects.
@@ -193,6 +245,7 @@ export default defineAgent({
         status: "completed",
         endedAt: new Date().toISOString(),
       });
+      finalEvent = "job_completed";
       log.info(
         { event: "job_completed", turns: state.stats.turns, reconnects: state.stats.reconnects },
         "interview completed",
@@ -207,14 +260,42 @@ export default defineAgent({
       });
       throw err;
     } finally {
+      await writeChain;
+
+      // Stop the egress (safe: ignores an already-stopped race when the room
+      // ended on its own) and reflect the stopped state on the job record.
+      if (recording.egressId) {
+        await recorder.stop(recording.egressId);
+        await tracker
+          .update(cfg.job_id, { recording: "stopped" })
+          .catch((err: unknown) =>
+            log.error({ event: "redis_write_failed", err }, "recording-stopped update failed"),
+          );
+      }
+
       // Apply the completion TTL so finished interviews stay inspectable then
       // clean up. On a hard crash this never runs, so state persists for recovery.
-      await writeChain;
       await store
         .finalize(cfg.job_id)
         .catch((err: unknown) =>
           log.error({ event: "redis_write_failed", err }, "finalize failed"),
         );
+
+      // Emit exactly one final-state webhook from the durable record (§17).
+      // Best-effort: sendWebhook never throws, so it cannot mask the job result.
+      const finalRecord = await tracker.get(cfg.job_id);
+      if (finalRecord) {
+        await sendWebhook({
+          url: env.webhookUrl,
+          event: finalEvent,
+          record: finalRecord,
+          maxRetries: env.webhookMaxRetries,
+          baseMs: env.webhookRetryBaseMs,
+          fetchFn: fetch,
+          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+          log,
+        });
+      }
     }
   },
 });

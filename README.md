@@ -15,32 +15,43 @@ architecture map lives in
 Run `pnpm verify` before committing implementation work. It runs linting,
 typechecking, tests, and the harness structure check.
 
-## Status: Phase 3 — Reconnect + reseed (never lose context)
+## Status: Phase 4 — Recording + final webhook
 
-The interview runs through a **ContextManager**. The OpenAI plugin already
-reconnects transient socket drops (replaying its in-memory context); when a
-session fails *fatally* (the plugin exhausts its retries and `AgentSession`
-closes with `CloseReason.ERROR`), the ContextManager opens a fresh realtime
-session **reseeded from the durable Redis recap** (covered/pending questions +
-recent turns) and continues — up to `RECONNECT_MAX_RETRIES`, then fails the job.
+The interview now records to S3 and reports its final state. Before the
+interview the worker runs an **S3 preflight** (HeadBucket → PutObject → Delete)
+and starts a **LiveKit Room Composite Egress** that writes an MP4 (or OGG when
+audio-only) to the backend-supplied `recordingKey`. The **required-vs-degrade**
+policy comes from `RECORDING_REQUIRED`: when required, a recording failure fails
+the job *before* the interview starts; when not required, it is logged, the
+recording is marked `failed`, and the interview continues. At the end, exactly
+one **final-state webhook** (`job_completed` / `job_failed`) is sent with a
+bounded retry; delivery is best-effort and never crashes teardown.
 
-**Implemented (Phase 3)**
+**Implemented (Phase 4)**
 
-- Pure reseed builder (instructions + recap from state) — `src/interview/reseed.ts`.
-- Reconnect/reseed controller, injected-effect and fault-injectable —
-  `src/interview/contextManager.ts`.
-- Wired into `src/agent.ts`; `RECONNECT_MAX_RETRIES` in `src/config/env.ts`.
-- Duration cap (`min(durationMins, 59)`) and the `assertProviderAllowed` Gemini
-  gate bound every run (carried from Phase 1, confirmed).
+- Pure Egress filepath resolver — `src/recording/recordingPlan.ts`.
+- Recording controller owning the required-vs-degrade policy + safe stop,
+  injected-effect — `src/recording/recorder.ts`.
+- Thin LiveKit Egress adapter — `src/recording/egressGateway.ts`; thin S3
+  preflight adapter (`@aws-sdk/client-s3`) — `src/recording/s3Preflight.ts`.
+- Pure webhook payload builder + bounded-retry sender (built-in `fetch`) —
+  `src/ops/webhook.ts`.
+- Wired into `src/agent.ts`: start recording after connect, stop egress on
+  teardown, emit one final-state webhook from the durable job record.
 
 **From earlier phases**
 
+- Reconnect + reseed via the ContextManager (transient drops handled by the
+  OpenAI plugin; fatal closes reseeded from the durable Redis recap, up to
+  `RECONNECT_MAX_RETRIES`).
 - LiveKit worker + agent, OpenAI realtime (Gemini gated), instruction builder,
   durable Redis state + transcript + job tracker, the
   `AgentMetadata`→`ResolvedJobConfig` contract, env loading, redacting logger.
+- Duration cap (`min(durationMins, 59)`) and the `assertProviderAllowed` Gemini
+  gate bound every run.
 
-**Not yet** (later phases): proactive session rotation (no-op hook), S3
-recording/Egress, monitoring API, webhooks, telemetry, concurrency cap, graceful
+**Not yet** (later phases): proactive session rotation (no-op hook), monitoring
+API, in-interview webhook progress events, telemetry, concurrency cap, graceful
 draining.
 
 > **API note:** the OpenAI realtime model id is **`gpt-realtime`** (voice
@@ -106,6 +117,28 @@ recovered by the OpenAI plugin (context replayed from memory). A *fatal* failure
 the worker logs `provider_reconnect_started` / `provider_reconnect_completed`,
 opens a fresh session seeded with the recap, and the agent continues from where
 it left off. Tune `RECONNECT_MAX_RETRIES` to bound the attempts.
+
+### Recording + final webhook (Phase 4 acceptance)
+
+The policy and webhook retry are proven by **credential-free unit tests**:
+
+```bash
+pnpm test src/recording src/ops/webhook.test.ts
+```
+
+Live (needs AWS + LiveKit creds, and a webhook endpoint): set `AWS_REGION`,
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `RECORDING_S3_BUCKET`, and
+`WEBHOOK_URL` in `.env`, dispatch a job whose metadata has
+`options.enableRecording = true` and a `recordingKey`, then run an interview.
+
+- An **MP4 lands in S3** at the `recordingKey` (the worker logs
+  `recording_started` with the egress id and `recording_stopped` at the end).
+- Your endpoint receives one **`job_completed`** (or `job_failed`) POST whose
+  body is `{ event, job }`.
+- Set `RECORDING_REQUIRED=true` and break S3 (e.g. a bad bucket): the job
+  **fails before the interview** and you get a `job_failed` webhook. With
+  `RECORDING_REQUIRED=false` the same break logs `recording_failed` and the
+  interview proceeds without a recording.
 
 ## Requirements
 
