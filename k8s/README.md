@@ -19,6 +19,7 @@ environment.
      --from-literal=LIVEKIT_API_KEY=... \
      --from-literal=LIVEKIT_API_SECRET=... \
      --from-literal=OPENAI_API_KEY=... \
+     --from-literal=GOOGLE_API_KEY=... \
      --from-literal=AWS_REGION=... \
      --from-literal=AWS_ACCESS_KEY_ID=... \
      --from-literal=AWS_SECRET_ACCESS_KEY=... \

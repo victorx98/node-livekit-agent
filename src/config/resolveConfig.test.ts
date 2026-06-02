@@ -30,7 +30,7 @@ describe("resolveJobConfig — §8.3 wire → internal mapping", () => {
     it("maps provider selection and language", () => {
       const cfg = resolveSample();
       expect(cfg.model_provider).toBe("openai");
-      expect(cfg.model).toBe("gpt-realtime-2");
+      expect(cfg.model).toBe("gpt-realtime");
       expect(cfg.language).toBe("en-US");
     });
 

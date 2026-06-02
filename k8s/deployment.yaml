@@ -63,10 +63,10 @@ spec:
             - name: SERVICE_NAME
               value: "livekit-ai-interview-agent"
           envFrom:
-            # Non-secret tuning (DEFAULT_VOICE, TURN_DETECTION, RECORDING_*, ...).
+            # Non-secret tuning (provider voices, TURN_DETECTION, RECORDING_*, ...).
             - configMapRef:
                 name: interview-agent-config
-            # Secrets: LIVEKIT_*, OPENAI_API_KEY, AWS_*, REDIS_URL, WEBHOOK_URL.
+            # Secrets: LIVEKIT_*, provider API keys, AWS_*, REDIS_URL, WEBHOOK_URL.
             - secretRef:
                 name: interview-agent-secrets
           # Liveness stays up during draining (process is healthy, just not

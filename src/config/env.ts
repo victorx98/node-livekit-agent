@@ -47,7 +47,12 @@ export interface Env {
   livekitApiKey?: string;
   livekitApiSecret?: string;
   openaiApiKey?: string;
+  openaiRealtimeVoice?: string;
   googleApiKey?: string;
+  googleRealtimeVoice?: string;
+  googleGenaiUseVertexai?: boolean;
+  googleCloudProject?: string;
+  googleCloudLocation?: string;
   awsRegion?: string;
   awsAccessKeyId?: string;
   awsSecretAccessKey?: string;
@@ -109,7 +114,12 @@ export function loadEnv(source: EnvSource = process.env): Env {
     livekitApiKey: str(source, "LIVEKIT_API_KEY"),
     livekitApiSecret: str(source, "LIVEKIT_API_SECRET"),
     openaiApiKey: str(source, "OPENAI_API_KEY"),
+    openaiRealtimeVoice: str(source, "OPENAI_REALTIME_VOICE"),
     googleApiKey: str(source, "GOOGLE_API_KEY"),
+    googleRealtimeVoice: str(source, "GOOGLE_REALTIME_VOICE"),
+    googleGenaiUseVertexai: boolOr(source, "GOOGLE_GENAI_USE_VERTEXAI", false),
+    googleCloudProject: str(source, "GOOGLE_CLOUD_PROJECT"),
+    googleCloudLocation: str(source, "GOOGLE_CLOUD_LOCATION"),
     awsRegion: str(source, "AWS_REGION"),
     awsAccessKeyId: str(source, "AWS_ACCESS_KEY_ID"),
     awsSecretAccessKey: str(source, "AWS_SECRET_ACCESS_KEY"),

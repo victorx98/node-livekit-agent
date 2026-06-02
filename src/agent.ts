@@ -2,7 +2,7 @@ import { defineAgent, voice, type JobContext, type JobProcess } from "@livekit/a
 import { RoomEvent } from "@livekit/rtc-node";
 import { resolveJobConfig } from "./config/resolveConfig.js";
 import { loadEnv } from "./config/env.js";
-import { assertProviderAllowed, createRealtimeModel } from "./providers/createRealtimeModel.js";
+import { assertProviderAllowed, createRealtimeModel } from "./providers/registry.js";
 import { createInitialState, appendTurn, type InterviewState } from "./interview/interviewState.js";
 import { chatRoleToTranscriptRole } from "./interview/transcriptStore.js";
 import { buildReseedContext } from "./interview/reseed.js";
@@ -37,8 +37,8 @@ export default defineAgent({
   entry: async (ctx: JobContext): Promise<void> => {
     const jobStartMs = Date.now();
     const cfg = resolveJobConfig(ctx.job?.metadata ?? "{}", ctx.job?.id ?? ctx.room.name);
-    assertProviderAllowed(cfg); // OpenAI passes; unverified Gemini is rejected (§15)
     const env = loadEnv();
+    assertProviderAllowed({ cfg, env });
 
     // Per-process metrics (§20); started once per child and reused across jobs.
     const metrics = await getChildMetrics(env.serviceName, env.otelExporterOtlpEndpoint);
@@ -168,11 +168,9 @@ export default defineAgent({
         const instructions = isReseed ? `${seed.instructions}\n\n${seed.recap}` : seed.instructions;
 
         const model = createRealtimeModel({
-          provider: cfg.model_provider,
-          model: cfg.model,
-          voice: cfg.voice,
+          cfg,
+          env,
           instructions,
-          realtime: cfg.realtime,
         });
         const agent = new voice.Agent({ instructions });
         const session = new voice.AgentSession({ llm: model });

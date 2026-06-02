@@ -7,8 +7,8 @@
 // Usage:
 //   node --env-file=.env scripts/dispatch.mjs [roomName]
 //
-// Requires in the environment: LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET
-// (and the worker process needs OPENAI_API_KEY).
+// Requires in the environment: LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET.
+// The worker process also needs credentials for the selected model provider.
 
 import { AccessToken, AgentDispatchClient } from "livekit-server-sdk";
 
@@ -16,6 +16,8 @@ const url = process.env.LIVEKIT_URL;
 const apiKey = process.env.LIVEKIT_API_KEY;
 const apiSecret = process.env.LIVEKIT_API_SECRET;
 const agentName = process.env.AGENT_NAME ?? "interview-agent";
+const modelProvider = process.env.DISPATCH_MODEL_PROVIDER ?? "openai";
+const modelName = process.env.DISPATCH_MODEL_NAME ?? "gpt-realtime";
 
 if (!url || !apiKey || !apiSecret) {
   console.error("Missing LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET in env.");
@@ -24,9 +26,9 @@ if (!url || !apiKey || !apiSecret) {
 
 const room = process.argv[2] ?? `interview-test-${Date.now()}`;
 
-// A realistic AgentMetadata payload (§8.1). model_name uses the real OpenAI
-// realtime GA model id (gpt-realtime); the design's "gpt-realtime-2" does not
-// exist in the installed plugin.
+// A realistic AgentMetadata payload (§8.1). Defaults use OpenAI's realtime GA
+// model id. Override DISPATCH_MODEL_PROVIDER=gemini and DISPATCH_MODEL_NAME for
+// Gemini verification.
 const metadata = {
   interviewId: "int_demo",
   studentId: "stu_demo",
@@ -51,8 +53,8 @@ const metadata = {
     language: "en-US",
     position: "Node.js Backend Engineer",
     durationMins: 10,
-    model_provider: "openai",
-    model_name: "gpt-realtime",
+    model_provider: modelProvider,
+    model_name: modelName,
     company: "MentorX",
     status: "scheduled",
     created_at: new Date().toISOString(),

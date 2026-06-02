@@ -1,11 +1,11 @@
 import type { ReseedSeed } from "./reseed.js";
 
-// Reconnect/reseed controller (§13). The OpenAI plugin already reconnects
-// transient socket drops and replays its in-memory context. This controller
-// handles the *fatal* path the framework cannot: when a session ends in error,
-// it builds a fresh session reseeded from durable state and continues, up to a
-// retry cap. It depends only on injected effects (no LiveKit, no Redis), so the
-// reconnect loop is unit-testable with fault injection.
+// Reconnect/reseed controller (§13). Provider plugins may recover transient
+// socket drops themselves. This controller handles the *fatal* path the
+// framework cannot: when a session ends in error, it builds a fresh session
+// reseeded from durable state and continues, up to a retry cap. It depends only
+// on injected effects (no LiveKit, no Redis), so the reconnect loop is
+// unit-testable with fault injection.
 
 export type SessionOutcome = { kind: "ended" } | { kind: "failed"; error?: unknown };
 

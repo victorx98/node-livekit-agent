@@ -1,9 +1,30 @@
-import { describe, it, expect, vi } from "vitest";
-import { assertProviderAllowed, buildTurnDetection } from "./createRealtimeModel.js";
+import { describe, it, expect } from "vitest";
+import { assertProviderAllowed } from "./registry.js";
+import { buildOpenAITurnDetection } from "./openai.js";
 import { resolveJobConfig } from "../config/resolveConfig.js";
 import { sampleAgentMetadata } from "../config/sampleMetadata.js";
 import type { AgentMetadata } from "../types/job.js";
 import type { ResolvedJobConfig } from "../types/config.js";
+import type { Env } from "../config/env.js";
+
+const baseEnv: Env = {
+  nodeEnv: "test",
+  serviceName: "livekit-ai-interview-agent",
+  logLevel: "silent",
+  maxConcurrentInterviews: 8,
+  numIdleProcesses: 3,
+  drainTimeoutSeconds: 3900,
+  geminiEnabled: false,
+  geminiMaxMinutes: 10,
+  webhookMaxRetries: 3,
+  webhookRetryBaseMs: 1000,
+  reconnectMaxRetries: 3,
+  recordingRequired: false,
+  monitoringPort: 8080,
+  monitoringHost: "127.0.0.1",
+  openaiApiKey: "sk-test",
+  googleApiKey: "google-test",
+};
 
 function cfgFrom(mutate?: (m: AgentMetadata) => void): ResolvedJobConfig {
   const m = sampleAgentMetadata();
@@ -14,57 +35,56 @@ function cfgFrom(mutate?: (m: AgentMetadata) => void): ResolvedJobConfig {
 describe("assertProviderAllowed (§11/§15)", () => {
   it("always allows OpenAI regardless of duration", () => {
     expect(() =>
-      assertProviderAllowed(
-        cfgFrom((m) => {
+      assertProviderAllowed({
+        cfg: cfgFrom((m) => {
           m.interviewData.model_provider = "openai";
           m.interviewData.durationMins = 60;
         }),
-      ),
+        env: baseEnv,
+      }),
     ).not.toThrow();
   });
 
   it("rejects Gemini when GEMINI_ENABLED is not 'true'", () => {
-    vi.stubEnv("GEMINI_ENABLED", "false");
     expect(() =>
-      assertProviderAllowed(
-        cfgFrom((m) => {
+      assertProviderAllowed({
+        cfg: cfgFrom((m) => {
           m.interviewData.model_provider = "google";
           m.interviewData.durationMins = 5;
         }),
-      ),
+        env: { ...baseEnv, geminiEnabled: false },
+      }),
     ).toThrow(/disabled/i);
   });
 
   it("allows Gemini under the duration cap when enabled", () => {
-    vi.stubEnv("GEMINI_ENABLED", "true");
-    vi.stubEnv("GEMINI_MAX_MINUTES", "10");
     expect(() =>
-      assertProviderAllowed(
-        cfgFrom((m) => {
+      assertProviderAllowed({
+        cfg: cfgFrom((m) => {
           m.interviewData.model_provider = "google";
           m.interviewData.durationMins = 10;
         }),
-      ),
+        env: { ...baseEnv, geminiEnabled: true, geminiMaxMinutes: 10 },
+      }),
     ).not.toThrow();
   });
 
   it("rejects Gemini above the duration cap even when enabled", () => {
-    vi.stubEnv("GEMINI_ENABLED", "true");
-    vi.stubEnv("GEMINI_MAX_MINUTES", "10");
     expect(() =>
-      assertProviderAllowed(
-        cfgFrom((m) => {
+      assertProviderAllowed({
+        cfg: cfgFrom((m) => {
           m.interviewData.model_provider = "google";
           m.interviewData.durationMins = 60;
         }),
-      ),
+        env: { ...baseEnv, geminiEnabled: true, geminiMaxMinutes: 10 },
+      }),
     ).toThrow(/10 min|limited/i);
   });
 });
 
-describe("buildTurnDetection (§11)", () => {
+describe("buildOpenAITurnDetection (§11)", () => {
   it("defaults to semantic_vad with interruptions on", () => {
-    const td = buildTurnDetection({
+    const td = buildOpenAITurnDetection({
       turn_detection: "semantic_vad",
       silence_duration_ms: 700,
       interrupt_response: true,
@@ -79,7 +99,7 @@ describe("buildTurnDetection (§11)", () => {
   });
 
   it("maps server_vad with the configured silence duration", () => {
-    const td = buildTurnDetection({
+    const td = buildOpenAITurnDetection({
       turn_detection: "server_vad",
       silence_duration_ms: 900,
       interrupt_response: true,
@@ -94,7 +114,7 @@ describe("buildTurnDetection (§11)", () => {
   });
 
   it("honors interrupt_response = false", () => {
-    const td = buildTurnDetection({
+    const td = buildOpenAITurnDetection({
       turn_detection: "semantic_vad",
       silence_duration_ms: 700,
       interrupt_response: false,

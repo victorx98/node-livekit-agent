@@ -19,7 +19,7 @@ External backend
   -> job entrypoint (`src/agent.ts`)  [child process; emits per-job metrics]
   -> config resolver (`src/config/resolveConfig.ts`)
   -> prompt builder (`src/interview/buildInstructions.ts`)
-  -> provider router (`src/providers/createRealtimeModel.ts`)
+  -> provider registry (`src/providers/registry.ts`)
   -> recording: S3 preflight + LiveKit Egress (`src/recording/recorder.ts`
        -> `src/recording/s3Preflight.ts` + `src/recording/egressGateway.ts`)
   -> reconnect controller (`src/interview/contextManager.ts`)
@@ -31,10 +31,10 @@ External backend
   -> teardown: stop egress + one final-state webhook (`src/ops/webhook.ts`)
 ```
 
-The OpenAI plugin reconnects transient socket drops itself (replaying in-memory
-context). The ContextManager handles the fatal path: when `AgentSession` closes
-with `CloseReason.ERROR`, it opens a new session seeded with instructions + a
-recap from durable state, up to `RECONNECT_MAX_RETRIES`.
+Provider plugins may reconnect transient socket drops themselves. The
+ContextManager handles the fatal path: when `AgentSession` closes with
+`CloseReason.ERROR`, it opens a new session seeded with instructions + a recap
+from durable state, up to `RECONNECT_MAX_RETRIES`.
 
 ## Modules
 
@@ -54,8 +54,10 @@ recap from durable state, up to `RECONNECT_MAX_RETRIES`.
 - `src/interview/contextManager.ts`: reconnect/reseed controller driven by
   injected effects (session factory, reconnect callback); includes a no-op
   rotation hook.
-- `src/providers/createRealtimeModel.ts`: gates providers and creates OpenAI
-  realtime models.
+- `src/providers/registry.ts`: selects the configured realtime provider and
+  creates a LiveKit-compatible realtime model.
+- `src/providers/openai.ts` / `src/providers/google.ts`: provider-specific
+  policy and LiveKit plugin option mapping.
 - `src/recording/recordingPlan.ts`: pure resolver for the Egress filepath from
   `recordingKey` (and the file extension from `audio_only`).
 - `src/recording/recorder.ts`: recording controller — owns the
@@ -88,8 +90,9 @@ recap from durable state, up to `RECONNECT_MAX_RETRIES`.
 
 ## Current Constraints
 
-- OpenAI realtime is wired; Gemini remains gated until its long-session behavior
-  is verified.
+- OpenAI and Google Gemini realtime providers are wired through the same local
+  provider interface. Gemini remains behind `GEMINI_ENABLED` and
+  `GEMINI_MAX_MINUTES` while long-session behavior is verified.
 - Job state, interview state, and transcript are persisted to Redis
   (write-through). `REDIS_URL` is required to run the worker.
 - Reconnect/reseed is implemented: fatal session failures rebuild a fresh
@@ -118,8 +121,8 @@ recap from durable state, up to `RECONNECT_MAX_RETRIES`.
 
 - Wire cancel enforcement (child observes the `cancelled` marker and ends the
   interview) under `src/agent.ts` + the tracker.
-- Add provider implementations under `src/providers/`, keeping duration gates
-  and capability checks explicit.
+- Add provider implementations under `src/providers/` by implementing the local
+  provider interface and returning a LiveKit `llm.RealtimeModel`.
 
 See `docs/harness/architecture-invariants.md` for the rules that keep these
 boundaries enforceable.

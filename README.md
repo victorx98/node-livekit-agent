@@ -51,9 +51,10 @@ is on 8081). A production **K8s manifest** lives in `k8s/`.
   required-vs-degrade per `RECORDING_REQUIRED`) and one final-state webhook
   (`job_completed`/`job_failed`) with bounded retry.
 - **Phase 3** — reconnect + reseed via the ContextManager (transient drops
-  handled by the OpenAI plugin; fatal closes reseeded from the durable Redis
+  handled by the selected provider plugin; fatal closes reseeded from the durable Redis
   recap, up to `RECONNECT_MAX_RETRIES`).
-- **Phases 0–2** — LiveKit worker + agent, OpenAI realtime (Gemini gated),
+- **Phases 0–2** — LiveKit worker + agent, pluggable realtime provider
+  registry (OpenAI and gated Google Gemini),
   instruction builder, durable Redis state + transcript + Redis-backed job
   tracker, the `AgentMetadata`→`ResolvedJobConfig` contract, env loading,
   redacting logger. Duration cap (`min(durationMins, 59)`) and the
@@ -64,15 +65,17 @@ in-interview webhook progress events, cancel enforcement in the child.
 
 > **API note:** the OpenAI realtime model id is **`gpt-realtime`** (voice
 > `marin`); the design doc's `gpt-realtime-2` does not exist in the installed
-> `@livekit/agents-plugin-openai@1.4.4`.
+> `@livekit/agents-plugin-openai@1.4.5`.
 
 ## Run a live interview (verification)
 
-Prerequisites: a LiveKit project (Cloud or self-hosted), an OpenAI key, and a
-Redis instance (`REDIS_URL`, required from Phase 2 on).
+Prerequisites: a LiveKit project (Cloud or self-hosted), a Redis instance
+(`REDIS_URL`, required from Phase 2 on), and credentials for the selected
+provider (`OPENAI_API_KEY` for OpenAI, or `GOOGLE_API_KEY`/Vertex settings for
+Gemini).
 
 1. `cp .env.example .env` and fill in `LIVEKIT_URL`, `LIVEKIT_API_KEY`,
-   `LIVEKIT_API_SECRET`, `OPENAI_API_KEY`, and `REDIS_URL`.
+   `LIVEKIT_API_SECRET`, provider credentials, and `REDIS_URL`.
 2. Build and start the worker (registers under `AGENT_NAME`, default
    `interview-agent`):
    ```bash
@@ -119,9 +122,9 @@ after the cap:
 pnpm test src/interview/contextManager.test.ts
 ```
 
-Live: during an interview, force a disconnect. A transient socket drop is
-recovered by the OpenAI plugin (context replayed from memory). A *fatal* failure
-(plugin retries exhausted) makes `AgentSession` close with `CloseReason.ERROR`;
+Live: during an interview, force a disconnect. A transient socket drop may be
+recovered by the selected provider plugin. A *fatal* failure (plugin retries
+exhausted) makes `AgentSession` close with `CloseReason.ERROR`;
 the worker logs `provider_reconnect_started` / `provider_reconnect_completed`,
 opens a fresh session seeded with the recap, and the agent continues from where
 it left off. Tune `RECONNECT_MAX_RETRIES` to bound the attempts.
@@ -198,7 +201,7 @@ pnpm build          # compile to dist/
 pnpm lint           # eslint
 pnpm format         # prettier --write
 
-pnpm dev            # run the worker (dev mode); needs .env with LiveKit + OpenAI creds
+pnpm dev            # run the worker (dev mode); needs .env with LiveKit + provider creds
 pnpm start          # run the worker (production mode)
 pnpm dispatch       # create a test dispatch + print a candidate token
 ```

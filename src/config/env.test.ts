@@ -12,6 +12,7 @@ describe("loadEnv", () => {
       DRAIN_TIMEOUT_SECONDS: "30",
       GEMINI_ENABLED: "true",
       GEMINI_MAX_MINUTES: "15",
+      GOOGLE_GENAI_USE_VERTEXAI: "true",
       WEBHOOK_MAX_RETRIES: "5",
       WEBHOOK_RETRY_BASE_MS: "2000",
       RECORDING_REQUIRED: "true",
@@ -28,6 +29,7 @@ describe("loadEnv", () => {
     expect(env.drainTimeoutSeconds).toBe(30);
     expect(env.geminiEnabled).toBe(true);
     expect(env.geminiMaxMinutes).toBe(15);
+    expect(env.googleGenaiUseVertexai).toBe(true);
     expect(env.webhookMaxRetries).toBe(5);
     expect(env.webhookRetryBaseMs).toBe(2000);
     expect(env.recordingRequired).toBe(true);
@@ -53,12 +55,18 @@ describe("loadEnv", () => {
     expect(env.reconnectMaxRetries).toBe(3);
     expect(env.monitoringPort).toBe(8080);
     expect(env.monitoringHost).toBe("0.0.0.0");
+    expect(env.googleGenaiUseVertexai).toBe(false);
   });
 
   it("exposes optional connection settings as undefined when unset", () => {
     const env = loadEnv({});
     expect(env.livekitUrl).toBeUndefined();
     expect(env.openaiApiKey).toBeUndefined();
+    expect(env.openaiRealtimeVoice).toBeUndefined();
+    expect(env.googleApiKey).toBeUndefined();
+    expect(env.googleRealtimeVoice).toBeUndefined();
+    expect(env.googleCloudProject).toBeUndefined();
+    expect(env.googleCloudLocation).toBeUndefined();
     expect(env.redisUrl).toBeUndefined();
     expect(env.webhookUrl).toBeUndefined();
   });
@@ -67,11 +75,21 @@ describe("loadEnv", () => {
     const env = loadEnv({
       LIVEKIT_URL: "wss://example.livekit.cloud",
       OPENAI_API_KEY: "sk-test",
+      OPENAI_REALTIME_VOICE: "marin",
+      GOOGLE_API_KEY: "google-test",
+      GOOGLE_REALTIME_VOICE: "Puck",
+      GOOGLE_CLOUD_PROJECT: "project-123",
+      GOOGLE_CLOUD_LOCATION: "us-central1",
       REDIS_URL: "redis://localhost:6379",
       WEBHOOK_URL: "https://backend/webhook",
     });
     expect(env.livekitUrl).toBe("wss://example.livekit.cloud");
     expect(env.openaiApiKey).toBe("sk-test");
+    expect(env.openaiRealtimeVoice).toBe("marin");
+    expect(env.googleApiKey).toBe("google-test");
+    expect(env.googleRealtimeVoice).toBe("Puck");
+    expect(env.googleCloudProject).toBe("project-123");
+    expect(env.googleCloudLocation).toBe("us-central1");
     expect(env.redisUrl).toBe("redis://localhost:6379");
     expect(env.webhookUrl).toBe("https://backend/webhook");
   });
