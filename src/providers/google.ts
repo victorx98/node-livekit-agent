@@ -14,10 +14,6 @@ export const googleProvider: RealtimeProvider = {
   id: "google",
 
   assertConfig({ cfg, env }) {
-    if (!env.geminiEnabled) {
-      throw new Error("Gemini is disabled (GEMINI_ENABLED=false). Use OpenAI.");
-    }
-
     if (cfg.interview.duration_minutes > env.geminiMaxMinutes) {
       throw new Error(
         `Gemini limited to ${env.geminiMaxMinutes} min until session resumption + context ` +

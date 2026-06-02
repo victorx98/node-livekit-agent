@@ -25,7 +25,6 @@ export interface Env {
   drainTimeoutSeconds: number;
 
   // provider gating (§15)
-  geminiEnabled: boolean;
   geminiMaxMinutes: number;
 
   // webhook (§17)
@@ -97,7 +96,6 @@ export function loadEnv(source: EnvSource = process.env): Env {
     numIdleProcesses: intOr(source, "NUM_IDLE_PROCESSES", 3),
     drainTimeoutSeconds: intOr(source, "DRAIN_TIMEOUT_SECONDS", 3900),
 
-    geminiEnabled: boolOr(source, "GEMINI_ENABLED", false),
     geminiMaxMinutes: intOr(source, "GEMINI_MAX_MINUTES", 10),
 
     webhookMaxRetries: intOr(source, "WEBHOOK_MAX_RETRIES", 3),

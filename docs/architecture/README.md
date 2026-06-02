@@ -90,9 +90,10 @@ from durable state, up to `RECONNECT_MAX_RETRIES`.
 
 ## Current Constraints
 
-- OpenAI and Google Gemini realtime providers are wired through the same local
-  provider interface. Gemini remains behind `GEMINI_ENABLED` and
-  `GEMINI_MAX_MINUTES` while long-session behavior is verified.
+- OpenAI and Google Gemini realtime providers are both enabled by default,
+  selected per-job from dispatch metadata through the same local provider
+  interface. Gemini is still bounded by `GEMINI_MAX_MINUTES` while long-session
+  behavior is verified.
 - Job state, interview state, and transcript are persisted to Redis
   (write-through). `REDIS_URL` is required to run the worker.
 - Reconnect/reseed is implemented: fatal session failures rebuild a fresh

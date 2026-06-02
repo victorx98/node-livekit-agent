@@ -14,7 +14,6 @@ const baseEnv: Env = {
   maxConcurrentInterviews: 8,
   numIdleProcesses: 3,
   drainTimeoutSeconds: 3900,
-  geminiEnabled: false,
   geminiMaxMinutes: 10,
   webhookMaxRetries: 3,
   webhookRetryBaseMs: 1000,
@@ -45,38 +44,26 @@ describe("assertProviderAllowed (§11/§15)", () => {
     ).not.toThrow();
   });
 
-  it("rejects Gemini when GEMINI_ENABLED is not 'true'", () => {
-    expect(() =>
-      assertProviderAllowed({
-        cfg: cfgFrom((m) => {
-          m.interviewData.model_provider = "google";
-          m.interviewData.durationMins = 5;
-        }),
-        env: { ...baseEnv, geminiEnabled: false },
-      }),
-    ).toThrow(/disabled/i);
-  });
-
-  it("allows Gemini under the duration cap when enabled", () => {
+  it("allows Gemini under the duration cap", () => {
     expect(() =>
       assertProviderAllowed({
         cfg: cfgFrom((m) => {
           m.interviewData.model_provider = "google";
           m.interviewData.durationMins = 10;
         }),
-        env: { ...baseEnv, geminiEnabled: true, geminiMaxMinutes: 10 },
+        env: { ...baseEnv, geminiMaxMinutes: 10 },
       }),
     ).not.toThrow();
   });
 
-  it("rejects Gemini above the duration cap even when enabled", () => {
+  it("rejects Gemini above the duration cap", () => {
     expect(() =>
       assertProviderAllowed({
         cfg: cfgFrom((m) => {
           m.interviewData.model_provider = "google";
           m.interviewData.durationMins = 60;
         }),
-        env: { ...baseEnv, geminiEnabled: true, geminiMaxMinutes: 10 },
+        env: { ...baseEnv, geminiMaxMinutes: 10 },
       }),
     ).toThrow(/10 min|limited/i);
   });

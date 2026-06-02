@@ -10,7 +10,6 @@ describe("loadEnv", () => {
       MAX_CONCURRENT_INTERVIEWS: "12",
       NUM_IDLE_PROCESSES: "4",
       DRAIN_TIMEOUT_SECONDS: "30",
-      GEMINI_ENABLED: "true",
       GEMINI_MAX_MINUTES: "15",
       GOOGLE_GENAI_USE_VERTEXAI: "true",
       WEBHOOK_MAX_RETRIES: "5",
@@ -27,7 +26,6 @@ describe("loadEnv", () => {
     expect(env.maxConcurrentInterviews).toBe(12);
     expect(env.numIdleProcesses).toBe(4);
     expect(env.drainTimeoutSeconds).toBe(30);
-    expect(env.geminiEnabled).toBe(true);
     expect(env.geminiMaxMinutes).toBe(15);
     expect(env.googleGenaiUseVertexai).toBe(true);
     expect(env.webhookMaxRetries).toBe(5);
@@ -47,7 +45,6 @@ describe("loadEnv", () => {
     expect(env.maxConcurrentInterviews).toBe(8);
     expect(env.numIdleProcesses).toBe(3);
     expect(env.drainTimeoutSeconds).toBe(3900);
-    expect(env.geminiEnabled).toBe(false);
     expect(env.geminiMaxMinutes).toBe(10);
     expect(env.webhookMaxRetries).toBe(3);
     expect(env.webhookRetryBaseMs).toBe(1000);

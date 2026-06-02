@@ -21,7 +21,6 @@ const baseEnv: Env = {
   maxConcurrentInterviews: 8,
   numIdleProcesses: 3,
   drainTimeoutSeconds: 3900,
-  geminiEnabled: true,
   geminiMaxMinutes: 30,
   webhookMaxRetries: 3,
   webhookRetryBaseMs: 1000,
@@ -53,7 +52,7 @@ describe("realtime provider registry", () => {
     expect(model.model).toBe("gpt-realtime");
   });
 
-  it("constructs a Gemini realtime model through the same interface when enabled", () => {
+  it("constructs a Gemini realtime model through the same interface", () => {
     const cfg = cfgFrom((m) => {
       m.interviewData.model_provider = "gemini";
       m.interviewData.model_name = "gemini-live-2.5-flash-native-audio";
@@ -83,17 +82,6 @@ describe("realtime provider registry", () => {
     });
 
     expect(() => assertProviderAllowed({ cfg, env: baseEnv })).toThrow(/30 min|limited/i);
-  });
-
-  it("rejects Gemini when disabled", () => {
-    const cfg = cfgFrom((m) => {
-      m.interviewData.model_provider = "google";
-      m.interviewData.durationMins = 5;
-    });
-
-    expect(() => assertProviderAllowed({ cfg, env: { ...baseEnv, geminiEnabled: false } })).toThrow(
-      /disabled/i,
-    );
   });
 
   it("rejects Gemini models that cannot support generated replies in this flow", () => {
