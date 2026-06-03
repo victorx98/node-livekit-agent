@@ -21,7 +21,7 @@ const modelName =
   process.env.DISPATCH_MODEL_NAME ??
   (modelProvider.toLowerCase() === "openai"
     ? (process.env.OPENAI_MODEL ?? "gpt-realtime-2")
-    : (process.env.GEMINI_MODEL ?? "gemini-3.1-flash-live-preview"));
+    : (process.env.GEMINI_MODEL ?? "gemini-live-2.5-flash-native-audio"));
 
 if (!url || !apiKey || !apiSecret) {
   console.error("Missing LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET in env.");

@@ -66,7 +66,7 @@ in-interview webhook progress events, cancel enforcement in the child.
 > **Model defaults:** per-job metadata should still send `interviewData.model_name`
 > when the backend knows the model. If it is omitted, the worker falls back to
 > `OPENAI_MODEL=gpt-realtime-2` or
-> `GEMINI_MODEL=gemini-3.1-flash-live-preview`.
+> `GEMINI_MODEL=gemini-live-2.5-flash-native-audio`.
 
 > **Gemini long sessions:** the Google provider enables
 > `contextWindowCompression: { slidingWindow: {} }` by default. The installed

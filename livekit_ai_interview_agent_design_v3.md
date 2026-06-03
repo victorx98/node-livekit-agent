@@ -875,7 +875,7 @@ function createOpenAIRealtimeModel(args: CreateRealtimeModelArgs) {
 // Present but only used when the flag + duration gate allow it (§15).
 function createGeminiRealtimeModel(args: CreateRealtimeModelArgs) {
   return new google.beta.realtime.RealtimeModel({
-    model: args.model ?? "gemini-3.1-flash-live-preview",
+    model: args.model ?? "gemini-live-2.5-flash-native-audio",
     voice: args.voice ?? "Puck",
     instructions: args.instructions,
     thinkingConfig: {

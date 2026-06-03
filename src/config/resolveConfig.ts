@@ -2,7 +2,7 @@ import { AgentMetadataSchema } from "./schema.js";
 import type { ResolvedJobConfig, ModelProvider } from "../types/config.js";
 
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
-export const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-live-preview";
+export const DEFAULT_GEMINI_MODEL = "gemini-live-2.5-flash-native-audio";
 
 // Adapter from the LiveKit dispatch metadata to the internal ResolvedJobConfig
 // (§8.2–§8.4). Compatibility normalization lives here so downstream modules only

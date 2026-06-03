@@ -282,7 +282,7 @@ describe("resolveJobConfig — §8.3 wire → internal mapping", () => {
       expect(cfg.student_id).toBeNull();
       expect(cfg.participant_id).toBe("participant");
       expect(cfg.model_provider).toBe("google");
-      expect(cfg.model).toBe("gemini-3.1-flash-live-preview");
+      expect(cfg.model).toBe("gemini-live-2.5-flash-native-audio");
       expect(cfg.interview.role).toBe("Senior Software Engineer");
       expect(cfg.interview.duration_minutes).toBe(30);
       expect(cfg.interview.participant).toEqual({ name: "Participant", email: null });
@@ -325,7 +325,7 @@ describe("resolveJobConfig — §8.3 wire → internal mapping", () => {
       });
 
       expect(openaiCfg.model).toBe("gpt-realtime-2");
-      expect(geminiCfg.model).toBe("gemini-3.1-flash-live-preview");
+      expect(geminiCfg.model).toBe("gemini-live-2.5-flash-native-audio");
     });
 
     it("uses OPENAI_MODEL and GEMINI_MODEL env fallbacks when present", () => {
