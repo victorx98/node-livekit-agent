@@ -21,7 +21,8 @@ const baseEnv: Env = {
   maxConcurrentInterviews: 8,
   numIdleProcesses: 3,
   drainTimeoutSeconds: 3900,
-  geminiMaxMinutes: 30,
+  geminiContextWindowCompressionEnabled: true,
+  geminiContextWindowCompressionTriggerTokens: undefined,
   webhookMaxRetries: 3,
   webhookRetryBaseMs: 1000,
   reconnectMaxRetries: 3,
@@ -36,6 +37,10 @@ function cfgFrom(mutate?: (m: AgentMetadata) => void): ResolvedJobConfig {
   const m = sampleAgentMetadata();
   mutate?.(m);
   return resolveJobConfig(JSON.stringify(m), "job_provider_test");
+}
+
+function googleOptions(model: llm.RealtimeModel): { contextWindowCompression?: unknown } {
+  return (model as unknown as { _options: { contextWindowCompression?: unknown } })._options;
 }
 
 describe("realtime provider registry", () => {
@@ -64,24 +69,45 @@ describe("realtime provider registry", () => {
 
     expect(model).toBeInstanceOf(llm.RealtimeModel);
     expect(model.model).toBe("gemini-live-2.5-flash-native-audio");
+    expect(googleOptions(model).contextWindowCompression).toEqual({ slidingWindow: {} });
   });
 
-  it("allows Gemini at exactly the configured duration cap", () => {
+  it("allows Gemini long durations when Google auth is valid", () => {
     const cfg = cfgFrom((m) => {
       m.interviewData.model_provider = "google";
-      m.interviewData.durationMins = baseEnv.geminiMaxMinutes;
+      m.interviewData.durationMins = 120;
     });
 
     expect(() => assertProviderAllowed({ cfg, env: baseEnv })).not.toThrow();
   });
 
-  it("rejects Gemini above the configured duration cap", () => {
+  it("passes a Gemini compression trigger token setting to the LiveKit model", () => {
     const cfg = cfgFrom((m) => {
       m.interviewData.model_provider = "google";
-      m.interviewData.durationMins = baseEnv.geminiMaxMinutes + 1;
+    });
+    const model = createRealtimeModel({
+      cfg,
+      env: { ...baseEnv, geminiContextWindowCompressionTriggerTokens: "32000" },
+      instructions: "Interview clearly.",
     });
 
-    expect(() => assertProviderAllowed({ cfg, env: baseEnv })).toThrow(/30 min|limited/i);
+    expect(googleOptions(model).contextWindowCompression).toEqual({
+      slidingWindow: {},
+      triggerTokens: "32000",
+    });
+  });
+
+  it("omits Gemini compression config when explicitly disabled", () => {
+    const cfg = cfgFrom((m) => {
+      m.interviewData.model_provider = "google";
+    });
+    const model = createRealtimeModel({
+      cfg,
+      env: { ...baseEnv, geminiContextWindowCompressionEnabled: false },
+      instructions: "Interview clearly.",
+    });
+
+    expect(googleOptions(model).contextWindowCompression).toBeUndefined();
   });
 
   it("allows the configured Gemini model when duration and auth are valid", () => {

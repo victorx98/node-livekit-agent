@@ -54,11 +54,11 @@ is on 8081). A production **K8s manifest** lives in `k8s/`.
   handled by the selected provider plugin; fatal closes reseeded from the durable Redis
   recap, up to `RECONNECT_MAX_RETRIES`).
 - **Phases 0–2** — LiveKit worker + agent, pluggable realtime provider
-  registry (OpenAI and gated Google Gemini),
+  registry (OpenAI and Google Gemini),
   instruction builder, durable Redis state + transcript + Redis-backed job
   tracker, the `AgentMetadata`→`ResolvedJobConfig` contract, env loading,
-  redacting logger. Duration cap (`min(durationMins, 59)`) and the
-  `assertProviderAllowed` Gemini gate bound every run.
+  redacting logger. Duration cap (`min(durationMins, 59)`) bounds every run,
+  and provider auth checks fail fast before model startup.
 
 **Not yet** (later phases): proactive session rotation (no-op hook),
 in-interview webhook progress events, cancel enforcement in the child.
@@ -67,6 +67,15 @@ in-interview webhook progress events, cancel enforcement in the child.
 > when the backend knows the model. If it is omitted, the worker falls back to
 > `OPENAI_MODEL=gpt-realtime-2` or
 > `GEMINI_MODEL=gemini-3.1-flash-live-preview`.
+
+> **Gemini long sessions:** the Google provider enables
+> `contextWindowCompression: { slidingWindow: {} }` by default. The installed
+> LiveKit Google plugin handles Gemini session resumption internally: it stores
+> `SessionResumptionUpdate` handles, sends them on reconnect, and responds to
+> `GoAway` by restarting the realtime connection. Set
+> `GEMINI_CONTEXT_WINDOW_COMPRESSION_ENABLED=false` only for targeted debugging;
+> `GEMINI_CONTEXT_WINDOW_COMPRESSION_TRIGGER_TOKENS` can tune the compression
+> trigger when needed.
 
 ## Run a live interview (verification)
 

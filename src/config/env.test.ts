@@ -10,7 +10,8 @@ describe("loadEnv", () => {
       MAX_CONCURRENT_INTERVIEWS: "12",
       NUM_IDLE_PROCESSES: "4",
       DRAIN_TIMEOUT_SECONDS: "30",
-      GEMINI_MAX_MINUTES: "15",
+      GEMINI_CONTEXT_WINDOW_COMPRESSION_ENABLED: "false",
+      GEMINI_CONTEXT_WINDOW_COMPRESSION_TRIGGER_TOKENS: "32000",
       GOOGLE_GENAI_USE_VERTEXAI: "true",
       WEBHOOK_MAX_RETRIES: "5",
       WEBHOOK_RETRY_BASE_MS: "2000",
@@ -26,7 +27,8 @@ describe("loadEnv", () => {
     expect(env.maxConcurrentInterviews).toBe(12);
     expect(env.numIdleProcesses).toBe(4);
     expect(env.drainTimeoutSeconds).toBe(30);
-    expect(env.geminiMaxMinutes).toBe(15);
+    expect(env.geminiContextWindowCompressionEnabled).toBe(false);
+    expect(env.geminiContextWindowCompressionTriggerTokens).toBe("32000");
     expect(env.googleGenaiUseVertexai).toBe(true);
     expect(env.webhookMaxRetries).toBe(5);
     expect(env.webhookRetryBaseMs).toBe(2000);
@@ -45,7 +47,8 @@ describe("loadEnv", () => {
     expect(env.maxConcurrentInterviews).toBe(8);
     expect(env.numIdleProcesses).toBe(3);
     expect(env.drainTimeoutSeconds).toBe(3900);
-    expect(env.geminiMaxMinutes).toBe(10);
+    expect(env.geminiContextWindowCompressionEnabled).toBe(true);
+    expect(env.geminiContextWindowCompressionTriggerTokens).toBeUndefined();
     expect(env.webhookMaxRetries).toBe(3);
     expect(env.webhookRetryBaseMs).toBe(1000);
     expect(env.recordingRequired).toBe(false);
@@ -95,5 +98,11 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ MAX_CONCURRENT_INTERVIEWS: "lots" })).toThrow(
       /MAX_CONCURRENT_INTERVIEWS/,
     );
+  });
+
+  it("throws a descriptive error for an invalid Gemini compression trigger", () => {
+    expect(() =>
+      loadEnv({ GEMINI_CONTEXT_WINDOW_COMPRESSION_TRIGGER_TOKENS: "0" }),
+    ).toThrow(/GEMINI_CONTEXT_WINDOW_COMPRESSION_TRIGGER_TOKENS/);
   });
 });

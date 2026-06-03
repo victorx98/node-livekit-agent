@@ -14,7 +14,8 @@ const baseEnv: Env = {
   maxConcurrentInterviews: 8,
   numIdleProcesses: 3,
   drainTimeoutSeconds: 3900,
-  geminiMaxMinutes: 10,
+  geminiContextWindowCompressionEnabled: true,
+  geminiContextWindowCompressionTriggerTokens: undefined,
   webhookMaxRetries: 3,
   webhookRetryBaseMs: 1000,
   reconnectMaxRetries: 3,
@@ -44,28 +45,16 @@ describe("assertProviderAllowed (§11/§15)", () => {
     ).not.toThrow();
   });
 
-  it("allows Gemini under the duration cap", () => {
+  it("allows Gemini regardless of duration when Google auth is valid", () => {
     expect(() =>
       assertProviderAllowed({
         cfg: cfgFrom((m) => {
           m.interviewData.model_provider = "google";
-          m.interviewData.durationMins = 10;
+          m.interviewData.durationMins = 120;
         }),
-        env: { ...baseEnv, geminiMaxMinutes: 10 },
+        env: baseEnv,
       }),
     ).not.toThrow();
-  });
-
-  it("rejects Gemini above the duration cap", () => {
-    expect(() =>
-      assertProviderAllowed({
-        cfg: cfgFrom((m) => {
-          m.interviewData.model_provider = "google";
-          m.interviewData.durationMins = 60;
-        }),
-        env: { ...baseEnv, geminiMaxMinutes: 10 },
-      }),
-    ).toThrow(/10 min|limited/i);
   });
 });
 

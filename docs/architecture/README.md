@@ -92,15 +92,16 @@ from durable state, up to `RECONNECT_MAX_RETRIES`.
 
 - OpenAI and Google Gemini realtime providers are both enabled by default,
   selected per-job from dispatch metadata through the same local provider
-  interface. Gemini is still bounded by `GEMINI_MAX_MINUTES` while long-session
-  behavior is verified.
+  interface. Gemini context window compression is enabled by default; the
+  LiveKit Google plugin manages Gemini session resumption handles and GoAway
+  reconnects.
 - Job state, interview state, and transcript are persisted to Redis
   (write-through). `REDIS_URL` is required to run the worker.
 - Reconnect/reseed is implemented: fatal session failures rebuild a fresh
   session from the durable recap, up to `RECONNECT_MAX_RETRIES`. Proactive
   rotation of a healthy session is deferred (no-op hook in the ContextManager).
-- The duration cap (`min(durationMins, 59)`) and the `assertProviderAllowed`
-  Gemini gate bound every run.
+- The duration cap (`min(durationMins, 59)`) bounds every run, and
+  `assertProviderAllowed` performs provider auth checks before model startup.
 - Recording to S3 via LiveKit Egress is implemented, gated by
   `enableRecording` with a required-vs-degrade policy from `RECORDING_REQUIRED`.
   One final-state webhook (`job_completed`/`job_failed`) is emitted with a

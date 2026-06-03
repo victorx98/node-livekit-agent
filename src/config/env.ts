@@ -24,8 +24,9 @@ export interface Env {
   numIdleProcesses: number;
   drainTimeoutSeconds: number;
 
-  // provider gating (§15)
-  geminiMaxMinutes: number;
+  // Gemini live long-session behavior (§15)
+  geminiContextWindowCompressionEnabled: boolean;
+  geminiContextWindowCompressionTriggerTokens?: string;
 
   // webhook (§17)
   webhookMaxRetries: number;
@@ -80,6 +81,16 @@ function intOr(source: EnvSource, name: string, fallback: number): number {
   return n;
 }
 
+function optionalPositiveIntString(source: EnvSource, name: string): string | undefined {
+  const raw = str(source, name);
+  if (raw === undefined) return undefined;
+  const n = Number(raw);
+  if (!Number.isSafeInteger(n) || n <= 0) {
+    throw new Error(`Invalid positive integer for ${name}: ${JSON.stringify(raw)}`);
+  }
+  return String(n);
+}
+
 function boolOr(source: EnvSource, name: string, fallback: boolean): boolean {
   const raw = str(source, name);
   if (raw === undefined) return fallback;
@@ -96,7 +107,15 @@ export function loadEnv(source: EnvSource = process.env): Env {
     numIdleProcesses: intOr(source, "NUM_IDLE_PROCESSES", 3),
     drainTimeoutSeconds: intOr(source, "DRAIN_TIMEOUT_SECONDS", 3900),
 
-    geminiMaxMinutes: intOr(source, "GEMINI_MAX_MINUTES", 10),
+    geminiContextWindowCompressionEnabled: boolOr(
+      source,
+      "GEMINI_CONTEXT_WINDOW_COMPRESSION_ENABLED",
+      true,
+    ),
+    geminiContextWindowCompressionTriggerTokens: optionalPositiveIntString(
+      source,
+      "GEMINI_CONTEXT_WINDOW_COMPRESSION_TRIGGER_TOKENS",
+    ),
 
     webhookMaxRetries: intOr(source, "WEBHOOK_MAX_RETRIES", 3),
     webhookRetryBaseMs: intOr(source, "WEBHOOK_RETRY_BASE_MS", 1000),
