@@ -1,8 +1,6 @@
 import * as google from "@livekit/agents-plugin-google";
 import type { RealtimeProvider } from "./types.js";
 
-const UNSUPPORTED_GENERATE_REPLY_MODELS = new Set(["gemini-3.1-flash-live-preview"]);
-
 function hasVertexAuth(env: {
   googleGenaiUseVertexai?: boolean;
   googleCloudProject?: string;
@@ -18,12 +16,6 @@ export const googleProvider: RealtimeProvider = {
       throw new Error(
         `Gemini limited to ${env.geminiMaxMinutes} min until session resumption + context ` +
           "compression are verified. Use OpenAI for longer interviews.",
-      );
-    }
-
-    if (UNSUPPORTED_GENERATE_REPLY_MODELS.has(cfg.model)) {
-      throw new Error(
-        `${cfg.model} does not support generateReply() in the current LiveKit AgentSession flow.`,
       );
     }
 

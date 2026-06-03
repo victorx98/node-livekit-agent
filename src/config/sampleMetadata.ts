@@ -20,7 +20,7 @@ export function sampleAgentMetadata(): AgentMetadata {
       position: "Node.js Backend Engineer",
       durationMins: 60,
       model_provider: "openai",
-      model_name: "gpt-realtime",
+      model_name: "gpt-realtime-2",
       interview_questions: [
         {
           question_text: "Tell me about your backend experience.",

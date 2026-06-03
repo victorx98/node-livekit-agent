@@ -17,7 +17,11 @@ const apiKey = process.env.LIVEKIT_API_KEY;
 const apiSecret = process.env.LIVEKIT_API_SECRET;
 const agentName = process.env.AGENT_NAME ?? "interview-agent";
 const modelProvider = process.env.DISPATCH_MODEL_PROVIDER ?? "openai";
-const modelName = process.env.DISPATCH_MODEL_NAME ?? "gpt-realtime";
+const modelName =
+  process.env.DISPATCH_MODEL_NAME ??
+  (modelProvider.toLowerCase() === "openai"
+    ? (process.env.OPENAI_MODEL ?? "gpt-realtime-2")
+    : (process.env.GEMINI_MODEL ?? "gemini-3.1-flash-live-preview"));
 
 if (!url || !apiKey || !apiSecret) {
   console.error("Missing LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET in env.");
@@ -26,9 +30,9 @@ if (!url || !apiKey || !apiSecret) {
 
 const room = process.argv[2] ?? `interview-test-${Date.now()}`;
 
-// A realistic AgentMetadata payload (§8.1). Defaults use OpenAI's realtime GA
-// model id. Override DISPATCH_MODEL_PROVIDER=gemini and DISPATCH_MODEL_NAME for
-// Gemini verification.
+// A realistic AgentMetadata payload (§8.1). Defaults mirror the worker's model
+// fallbacks. Override DISPATCH_MODEL_PROVIDER and DISPATCH_MODEL_NAME for manual
+// provider verification.
 const metadata = {
   interviewId: "int_demo",
   studentId: "stu_demo",

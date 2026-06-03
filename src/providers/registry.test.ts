@@ -84,14 +84,14 @@ describe("realtime provider registry", () => {
     expect(() => assertProviderAllowed({ cfg, env: baseEnv })).toThrow(/30 min|limited/i);
   });
 
-  it("rejects Gemini models that cannot support generated replies in this flow", () => {
+  it("allows the configured Gemini model when duration and auth are valid", () => {
     const cfg = cfgFrom((m) => {
       m.interviewData.model_provider = "google";
       m.interviewData.model_name = "gemini-3.1-flash-live-preview";
       m.interviewData.durationMins = 5;
     });
 
-    expect(() => assertProviderAllowed({ cfg, env: baseEnv })).toThrow(/generateReply/i);
+    expect(() => assertProviderAllowed({ cfg, env: baseEnv })).not.toThrow();
   });
 
   it("rejects OpenAI jobs without OpenAI auth", () => {

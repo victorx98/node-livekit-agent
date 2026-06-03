@@ -30,7 +30,7 @@ describe("resolveJobConfig — §8.3 wire → internal mapping", () => {
     it("maps provider selection and language", () => {
       const cfg = resolveSample();
       expect(cfg.model_provider).toBe("openai");
-      expect(cfg.model).toBe("gpt-realtime");
+      expect(cfg.model).toBe("gpt-realtime-2");
       expect(cfg.language).toBe("en-US");
     });
 
@@ -169,9 +169,17 @@ describe("resolveJobConfig — §8.3 wire → internal mapping", () => {
       const cfg = resolveSample();
       expect(cfg.recording.required).toBe(false);
     });
+
+    it("uses S3_BUCKET when RECORDING_S3_BUCKET is unset", () => {
+      vi.stubEnv("RECORDING_S3_BUCKET", "");
+      vi.stubEnv("S3_BUCKET", "python-era-bucket");
+
+      const cfg = resolveSample();
+      expect(cfg.recording.s3_bucket).toBe("python-era-bucket");
+    });
   });
 
-  describe("zod defaults for optional/missing wire fields", () => {
+  describe("compatibility normalization and optional/missing wire fields", () => {
     it("defaults missing systemInstruction and recordingKey to empty strings", () => {
       const cfg = resolveSample((m) => {
         delete (m as Partial<AgentMetadata>).systemInstruction;
@@ -210,11 +218,131 @@ describe("resolveJobConfig — §8.3 wire → internal mapping", () => {
       expect(cfg.recording.enabled).toBe(false);
     });
 
+    it("derives options.enableRecording from top-level enableRecording", () => {
+      const cfg = resolveSample((m) => {
+        delete (m as Partial<AgentMetadata>).options;
+        (m as unknown as Record<string, unknown>).enableRecording = true;
+      });
+
+      expect(cfg.recording.enabled).toBe(true);
+    });
+
     it("derives title without company as 'position (type)'", () => {
       const cfg = resolveSample((m) => {
         m.interviewData.company = "";
       });
       expect(cfg.interview.title).toBe("Node.js Backend Engineer (technical)");
+    });
+
+    it("accepts snake_case top-level metadata and modelProvider aliases", () => {
+      const canonical = sampleAgentMetadata();
+      const meta: Record<string, unknown> = {
+        interview_id: canonical.interviewId,
+        interview_data: {
+          ...canonical.interviewData,
+          model_provider: undefined,
+          modelProvider: "Gemini",
+        },
+        student_id: null,
+        participant_id: "snake-participant",
+        participant_info: canonical.participantInfo,
+        system_instruction: "snake prompt",
+        recording_key: "snake/path.mp4",
+        options: { autoStart: false, enableLogging: false, enableRecording: true },
+      };
+
+      const cfg = resolveJobConfig(meta, JOB_ID);
+
+      expect(cfg.interview_id).toBe(canonical.interviewId);
+      expect(cfg.student_id).toBeNull();
+      expect(cfg.participant_id).toBe("snake-participant");
+      expect(cfg.model_provider).toBe("google");
+      expect(cfg.interview.system_prompt).toBe("snake prompt");
+      expect(cfg.recording.key).toBe("snake/path.mp4");
+      expect(cfg.options.autoStart).toBe(false);
+      expect(cfg.options.enableLogging).toBe(false);
+    });
+
+    it("accepts Python README-style minimal metadata", () => {
+      const cfg = resolveJobConfig(
+        {
+          interviewId: "456",
+          interviewData: {
+            job_title: "Senior Software Engineer",
+            questions: ["Tell me about yourself", "What are your strengths?"],
+            model_provider: "google",
+          },
+          enableRecording: true,
+          options: { autoStart: true },
+        },
+        "job_python_minimal",
+      );
+
+      expect(cfg.interview_id).toBe("456");
+      expect(cfg.student_id).toBeNull();
+      expect(cfg.participant_id).toBe("participant");
+      expect(cfg.model_provider).toBe("google");
+      expect(cfg.model).toBe("gemini-3.1-flash-live-preview");
+      expect(cfg.interview.role).toBe("Senior Software Engineer");
+      expect(cfg.interview.duration_minutes).toBe(30);
+      expect(cfg.interview.participant).toEqual({ name: "Participant", email: null });
+      expect(cfg.interview.questions).toEqual([
+        { question_text: "Tell me about yourself" },
+        { question_text: "What are your strengths?" },
+      ]);
+      expect(cfg.recording.enabled).toBe(true);
+    });
+
+    it("accepts JSON-stringified interview_data and falls back to OPENAI_MODEL", () => {
+      vi.stubEnv("OPENAI_MODEL", "gpt-realtime-2");
+
+      const cfg = resolveJobConfig(
+        {
+          interview_id: "json-inner",
+          interview_data: JSON.stringify({
+            job_title: "Platform Engineer",
+            questions: ["How do you debug latency?"],
+            modelProvider: "openai",
+          }),
+        },
+        "job_json_inner",
+      );
+
+      expect(cfg.model_provider).toBe("openai");
+      expect(cfg.model).toBe("gpt-realtime-2");
+      expect(cfg.interview.role).toBe("Platform Engineer");
+      expect(cfg.interview.questions).toEqual([{ question_text: "How do you debug latency?" }]);
+    });
+
+    it("falls back to requested default models when metadata omits model_name", () => {
+      const openaiCfg = resolveSample((m) => {
+        m.interviewData.model_provider = "openai";
+        delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).model_name;
+      });
+      const geminiCfg = resolveSample((m) => {
+        m.interviewData.model_provider = "google";
+        delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).model_name;
+      });
+
+      expect(openaiCfg.model).toBe("gpt-realtime-2");
+      expect(geminiCfg.model).toBe("gemini-3.1-flash-live-preview");
+    });
+
+    it("uses OPENAI_MODEL and GEMINI_MODEL env fallbacks when present", () => {
+      vi.stubEnv("OPENAI_MODEL", "gpt-realtime-env");
+      vi.stubEnv("GEMINI_MODEL", "gemini-env");
+
+      const openaiCfg = resolveSample((m) => {
+        m.interviewData.model_provider = "openai";
+        delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).model_name;
+      });
+      const geminiCfg = resolveSample((m) => {
+        m.interviewData.model_provider = "google";
+        delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).model_name;
+      });
+
+      expect(openaiCfg.model).toBe("gpt-realtime-env");
+      expect(geminiCfg.model).toBe("gemini-env");
     });
   });
 

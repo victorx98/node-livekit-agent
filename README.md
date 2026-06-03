@@ -63,9 +63,10 @@ is on 8081). A production **K8s manifest** lives in `k8s/`.
 **Not yet** (later phases): proactive session rotation (no-op hook),
 in-interview webhook progress events, cancel enforcement in the child.
 
-> **API note:** the OpenAI realtime model id is **`gpt-realtime`** (voice
-> `marin`); the design doc's `gpt-realtime-2` does not exist in the installed
-> `@livekit/agents-plugin-openai@1.4.5`.
+> **Model defaults:** per-job metadata should still send `interviewData.model_name`
+> when the backend knows the model. If it is omitted, the worker falls back to
+> `OPENAI_MODEL=gpt-realtime-2` or
+> `GEMINI_MODEL=gemini-3.1-flash-live-preview`.
 
 ## Run a live interview (verification)
 
@@ -138,9 +139,10 @@ pnpm test src/recording src/ops/webhook.test.ts
 ```
 
 Live (needs AWS + LiveKit creds, and a webhook endpoint): set `AWS_REGION`,
-`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `RECORDING_S3_BUCKET`, and
-`WEBHOOK_URL` in `.env`, dispatch a job whose metadata has
-`options.enableRecording = true` and a `recordingKey`, then run an interview.
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `RECORDING_S3_BUCKET` (or the
+Python-era `S3_BUCKET`), and `WEBHOOK_URL` in `.env`, dispatch a job whose
+metadata has `options.enableRecording = true` (or top-level `enableRecording =
+true`) and a `recordingKey`, then run an interview.
 
 - An **MP4 lands in S3** at the `recordingKey` (the worker logs
   `recording_started` with the egress id and `recording_stopped` at the end).
@@ -208,14 +210,41 @@ pnpm dispatch       # create a test dispatch + print a candidate token
 
 ## Config model
 
-`AgentMetadata` (the wire contract, §8.1) is the source of truth. The rest of
-the service consumes `ResolvedJobConfig` (§8.2). `resolveJobConfig` is the only
-module that knows the wire shape — it validates with zod and maps per the §8.3
-table.
+`AgentMetadata` (the canonical wire contract, §8.1) is the preferred metadata
+shape. The rest of the service consumes `ResolvedJobConfig` (§8.2).
+`resolveJobConfig` is the only module that knows the wire shape — it normalizes
+API and deployed Python-agent-compatible payloads, validates with zod, and maps
+per the §8.3 table.
 
-In production the LiveKit worker calls it as
-`resolveJobConfig(ctx.job?.metadata ?? "{}", ctx.job?.id ?? ctx.room.name)`. The
-function is kept pure (string + job id in) so the contract is fast to unit-test
-and the LiveKit dependency stays out of the core.
+In production the LiveKit worker first extracts metadata from the room/job
+context in Python-compatible order:
+
+1. `ctx.room.metadata`
+2. `ctx.job.accept_arguments.metadata`
+3. `ctx.job.acceptArguments.metadata`
+4. `ctx.job.job.metadata`
+5. `ctx.job.metadata`
+6. `ctx.job.request.metadata`
+
+The resolver accepts JSON strings or object payloads. It supports canonical
+camelCase keys and legacy snake_case aliases including
+`interviewId/interview_id`, `interviewData/interview_data`,
+`studentId/student_id`, `participantId/participant_id`, and
+`modelName/model_name`.
+
+Python-compatible fallbacks:
+
+- `interviewData` may be a JSON string.
+- Provider resolves from `interviewData.model_provider`,
+  `interviewData.modelProvider`, top-level `provider`, then `google`.
+- Model resolves from metadata first, then `OPENAI_MODEL` or `GEMINI_MODEL`.
+- Python-style `job_title` maps to `position`.
+- Python-style `questions: string[]` maps to `{ question_text }[]`.
+- Top-level `enableRecording` drives recording when
+  `options.enableRecording` is absent.
+- `RECORDING_S3_BUCKET` falls back to `S3_BUCKET`.
+
+The core resolver remains pure (metadata payload + job id in) so the contract is
+fast to unit-test and the LiveKit dependency stays out of the core.
 
 Copy `.env.example` to `.env` and fill in values as subsystems are wired.

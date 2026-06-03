@@ -1,6 +1,7 @@
 import { defineAgent, voice, type JobContext, type JobProcess } from "@livekit/agents";
 import { RoomEvent } from "@livekit/rtc-node";
 import { resolveJobConfig } from "./config/resolveConfig.js";
+import { extractJobMetadata } from "./config/metadata.js";
 import { loadEnv } from "./config/env.js";
 import { assertProviderAllowed, createRealtimeModel } from "./providers/registry.js";
 import { createInitialState, appendTurn, type InterviewState } from "./interview/interviewState.js";
@@ -36,7 +37,8 @@ export default defineAgent({
 
   entry: async (ctx: JobContext): Promise<void> => {
     const jobStartMs = Date.now();
-    const cfg = resolveJobConfig(ctx.job?.metadata ?? "{}", ctx.job?.id ?? ctx.room.name);
+    const extractedMetadata = extractJobMetadata(ctx);
+    const cfg = resolveJobConfig(extractedMetadata.metadata, ctx.job?.id ?? ctx.room.name);
     const env = loadEnv();
     assertProviderAllowed({ cfg, env });
 
@@ -50,6 +52,7 @@ export default defineAgent({
       provider: cfg.model_provider,
       model: cfg.model,
       room: ctx.room.name,
+      metadata_source: extractedMetadata.source,
     });
 
     const roomName = ctx.room.name ?? cfg.job_id;
