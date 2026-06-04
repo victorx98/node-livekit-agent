@@ -176,7 +176,13 @@ export default defineAgent({
           instructions,
         });
         const agent = new voice.Agent({ instructions });
-        const session = new voice.AgentSession({ llm: model });
+        const session = new voice.AgentSession({
+          llm: model,
+          // Realtime models emit audio only after the candidate finishes
+          // speaking; the framework's 10s first-frame timeout would otherwise
+          // drop the response to any answer longer than ~10s (§8.3).
+          forwardAudioIdleTimeout: env.forwardAudioIdleTimeoutMs,
+        });
 
         // Capture every conversation turn (write-through). Subscribing before
         // start captures the opening line too.

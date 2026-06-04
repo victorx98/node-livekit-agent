@@ -39,8 +39,26 @@ function cfgFrom(mutate?: (m: AgentMetadata) => void): ResolvedJobConfig {
   return resolveJobConfig(JSON.stringify(m), "job_provider_test");
 }
 
-function googleOptions(model: llm.RealtimeModel): { contextWindowCompression?: unknown } {
-  return (model as unknown as { _options: { contextWindowCompression?: unknown } })._options;
+function googleOptions(model: llm.RealtimeModel): {
+  contextWindowCompression?: unknown;
+  language?: unknown;
+  realtimeInputConfig?: {
+    automaticActivityDetection?: { silenceDurationMs?: number };
+    activityHandling?: string;
+  };
+} {
+  return (
+    model as unknown as {
+      _options: {
+        contextWindowCompression?: unknown;
+        language?: unknown;
+        realtimeInputConfig?: {
+          automaticActivityDetection?: { silenceDurationMs?: number };
+          activityHandling?: string;
+        };
+      };
+    }
+  )._options;
 }
 
 describe("realtime provider registry", () => {
@@ -57,9 +75,11 @@ describe("realtime provider registry", () => {
     expect(model.model).toBe("gpt-realtime");
   });
 
-  it("constructs a Gemini realtime model through the same interface", () => {
+  it("constructs a Gemini realtime model, ignoring the metadata model_name", () => {
     const cfg = cfgFrom((m) => {
       m.interviewData.model_provider = "gemini";
+      // Dispatchers send LiveKit-style ids the Gemini Live API rejects; the
+      // resolver overrides this with the hardcoded server-side default.
       m.interviewData.model_name = "gemini-live-2.5-flash-native-audio";
       m.interviewData.durationMins = 30;
     });
@@ -68,8 +88,18 @@ describe("realtime provider registry", () => {
     const model = createRealtimeModel({ cfg, env: baseEnv, instructions: "Interview clearly." });
 
     expect(model).toBeInstanceOf(llm.RealtimeModel);
-    expect(model.model).toBe("gemini-live-2.5-flash-native-audio");
+    expect(model.model).toBe("gemini-2.5-flash-native-audio-preview-12-2025");
     expect(googleOptions(model).contextWindowCompression).toEqual({ slidingWindow: {} });
+    // Native-audio models reject an explicit languageCode, so it is omitted.
+    expect(googleOptions(model).language).toBeUndefined();
+    // End-of-speech detection is configured (otherwise Gemini lags by tens of
+    // seconds). silenceDurationMs comes from cfg.realtime (default 700).
+    expect(googleOptions(model).realtimeInputConfig?.automaticActivityDetection?.silenceDurationMs).toBe(
+      700,
+    );
+    expect(googleOptions(model).realtimeInputConfig?.activityHandling).toBe(
+      "START_OF_ACTIVITY_INTERRUPTS",
+    );
   });
 
   it("allows Gemini long durations when Google auth is valid", () => {

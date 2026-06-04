@@ -35,6 +35,13 @@ export interface Env {
   // reconnect/reseed (§13)
   reconnectMaxRetries: number;
 
+  // Realtime audio: how long the framework waits for the model's first audio
+  // frame before giving up on a response. The default (10s) is tuned for TTS;
+  // realtime models only emit audio after the user's turn ends, so a long
+  // answer (> this) gets its response dropped. Raise it past the longest
+  // expected single user turn.
+  forwardAudioIdleTimeoutMs: number;
+
   // recording policy (§16)
   recordingRequired: boolean;
 
@@ -121,6 +128,7 @@ export function loadEnv(source: EnvSource = process.env): Env {
     webhookRetryBaseMs: intOr(source, "WEBHOOK_RETRY_BASE_MS", 1000),
 
     reconnectMaxRetries: intOr(source, "RECONNECT_MAX_RETRIES", 3),
+    forwardAudioIdleTimeoutMs: intOr(source, "FORWARD_AUDIO_IDLE_TIMEOUT_MS", 300_000),
 
     recordingRequired: boolOr(source, "RECORDING_REQUIRED", false),
 

@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1057.0",
+    "@google/genai": "1.52.0",
     "@livekit/agents": "^1.4.5",
     "@livekit/agents-plugin-google": "1.4.5",
     "@livekit/agents-plugin-openai": "^1.4.5",

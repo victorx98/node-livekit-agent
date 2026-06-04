@@ -11,6 +11,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1057.0
         version: 3.1057.0
+      '@google/genai':
+        specifier: 1.52.0
+        version: 1.52.0
       '@livekit/agents':
         specifier: ^1.4.5
         version: 1.4.5(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)
