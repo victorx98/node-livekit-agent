@@ -26,6 +26,14 @@ FROM node:22-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
+# The @livekit/rtc-node native engine validates TLS against the OS trust store
+# (Node's own bundled CAs cover the JS layer only). node:22-slim ships without
+# it, so the room-connect region-info fetch fails its TLS handshake and every
+# job dies with "failed to retrieve region info". Install the CA bundle.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 # Run as non-root.
 USER node
 
