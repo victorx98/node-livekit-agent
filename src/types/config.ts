@@ -24,8 +24,8 @@ export interface ResolvedJobConfig {
 
   // interview content
   interview: {
-    title: string; // derived: position + interview_type/company
-    role: string; // interviewData.position
+    title: string; // derived from position/company/interview_type
+    role: string; // interviewData.position when present; empty for role-less interviews
     type: string; // interviewData.interview_type
     company: string; // interviewData.company
     duration_minutes: number; // interviewData.durationMins

@@ -5,6 +5,11 @@ import type { ResolvedJobConfig } from "../types/config.js";
 // interruption handling, and graceful self-recovery — it never asks an operator.
 
 export function buildInterviewInstructions(cfg: ResolvedJobConfig): string {
+  const roleBlock = cfg.interview.role
+    ? `\n\nRole:\n${cfg.interview.role}${cfg.interview.company ? `\n\nCompany:\n${cfg.interview.company}` : ""}`
+    : cfg.interview.company
+      ? `\n\nCompany:\n${cfg.interview.company}`
+      : "";
   const questions = cfg.interview.questions.length
     ? cfg.interview.questions
         .map((q, i) => {
@@ -14,7 +19,7 @@ export function buildInterviewInstructions(cfg: ResolvedJobConfig): string {
           return lines.join("\n");
         })
         .join("\n")
-    : "No fixed questions were provided. Generate relevant questions based on the role.";
+    : "No fixed questions were provided. Generate relevant questions based on the interview type and system guidance.";
 
   const student = cfg.interview.student;
   const candidateCtx = [
@@ -29,10 +34,7 @@ export function buildInterviewInstructions(cfg: ResolvedJobConfig): string {
 You are an AI interviewer conducting a live spoken interview.
 
 Interview:
-${cfg.interview.title}
-
-Role:
-${cfg.interview.role}${cfg.interview.company ? `\n\nCompany:\n${cfg.interview.company}` : ""}
+${cfg.interview.title}${roleBlock}
 
 Target duration:
 ${cfg.interview.duration_minutes} minutes

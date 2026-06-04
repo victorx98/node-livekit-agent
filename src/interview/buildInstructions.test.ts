@@ -77,6 +77,21 @@ describe("buildInterviewInstructions (§12)", () => {
     expect(out).not.toContain("Company:");
   });
 
+  it("omits the role section when no role-like field is provided", () => {
+    const out = buildInterviewInstructions(
+      cfgFrom((m) => {
+        delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).position;
+        m.interviewData.interview_type = "success_story";
+        m.interviewData.company = "";
+        m.interviewData.interview_questions = [];
+      }),
+    );
+
+    expect(out).toContain("Interview:\nsuccess_story");
+    expect(out).not.toContain("Role:");
+    expect(out).toContain("interview type and system guidance");
+  });
+
   it("always encodes turn-taking and completion guidance for autonomy", () => {
     const out = buildInterviewInstructions(cfgFrom());
     expect(out).toContain("one question at a time");

@@ -247,7 +247,8 @@ Python-compatible fallbacks:
 - Provider resolves from `interviewData.model_provider`,
   `interviewData.modelProvider`, top-level `provider`, then `google`.
 - Model resolves from metadata first, then `OPENAI_MODEL` or `GEMINI_MODEL`.
-- Python-style `job_title` maps to `position`.
+- Python-style `job_title` maps to `position`; role-less interviews such as
+  success-story conversations may omit both and rely on `systemInstruction`.
 - Python-style `questions: string[]` maps to `{ question_text }[]`.
 - Top-level `enableRecording` drives recording when
   `options.enableRecording` is absent.

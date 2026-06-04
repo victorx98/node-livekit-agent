@@ -103,6 +103,12 @@ function normalizeQuestions(rawQuestions: unknown): unknown[] {
   );
 }
 
+function titleFor(position: string, company: string, interviewType: string): string {
+  if (position) return `${position}${company ? " @ " + company : ""} (${interviewType})`;
+  if (company) return `${company} (${interviewType})`;
+  return interviewType;
+}
+
 function normalizeMetadata(rawMetadata: unknown): Record<string, unknown> {
   const top = parseMetadata(rawMetadata);
   const interviewData = parseInterviewData(top.interviewData ?? top.interview_data);
@@ -161,7 +167,7 @@ function normalizeMetadata(rawMetadata: unknown): Record<string, unknown> {
     options,
     interviewData: {
       ...interviewData,
-      position: firstString(interviewData.position, interviewData.job_title, interviewData.jobTitle),
+      position: firstString(interviewData.position, interviewData.job_title, interviewData.jobTitle) ?? "",
       interview_type: firstString(interviewData.interview_type, interviewData.interviewType),
       company: firstString(interviewData.company),
       language: firstString(interviewData.language),
@@ -213,7 +219,7 @@ export function resolveJobConfig(rawMetadata: unknown, jobId: string): ResolvedJ
     language: d.language,
 
     interview: {
-      title: `${d.position}${d.company ? " @ " + d.company : ""} (${d.interview_type})`,
+      title: titleFor(d.position, d.company, d.interview_type),
       role: d.position,
       type: d.interview_type,
       company: d.company,

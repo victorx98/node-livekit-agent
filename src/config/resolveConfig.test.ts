@@ -314,6 +314,49 @@ describe("resolveJobConfig — §8.3 wire → internal mapping", () => {
       expect(cfg.interview.questions).toEqual([{ question_text: "How do you debug latency?" }]);
     });
 
+    it("accepts success-story metadata without position or job_title", () => {
+      const cfg = resolveJobConfig(
+        {
+          interviewId: "success-story-123",
+          interviewData: {
+            interview_type: "success_story",
+            model_provider: "openai",
+            questions: [
+              "What changed for you after joining the program?",
+              "Which support was most useful?",
+            ],
+          },
+          participantInfo: { name: "Casey", email: null },
+          systemInstruction: "Interview the participant for a student success story.",
+          options: { autoStart: true },
+        },
+        "job_success_story",
+      );
+
+      expect(cfg.interview_id).toBe("success-story-123");
+      expect(cfg.interview.title).toBe("success_story");
+      expect(cfg.interview.role).toBe("");
+      expect(cfg.interview.system_prompt).toBe(
+        "Interview the participant for a student success story.",
+      );
+      expect(cfg.interview.participant).toEqual({ name: "Casey", email: null });
+      expect(cfg.interview.questions).toEqual([
+        { question_text: "What changed for you after joining the program?" },
+        { question_text: "Which support was most useful?" },
+      ]);
+    });
+
+    it("derives title from company and interview_type when role is missing", () => {
+      const cfg = resolveSample((m) => {
+        delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).position;
+        m.interviewData.company = "MentorX";
+        m.interviewData.interview_type = "success_story";
+      });
+
+      expect(cfg.interview.title).toBe("MentorX (success_story)");
+      expect(cfg.interview.role).toBe("");
+    });
+
     it("falls back to requested default models when metadata omits model_name", () => {
       const openaiCfg = resolveSample((m) => {
         m.interviewData.model_provider = "openai";
@@ -360,14 +403,6 @@ describe("resolveJobConfig — §8.3 wire → internal mapping", () => {
       expect(() =>
         resolveSample((m) => {
           m.interviewData.durationMins = -5;
-        }),
-      ).toThrow();
-    });
-
-    it("throws when required position is missing", () => {
-      expect(() =>
-        resolveSample((m) => {
-          delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).position;
         }),
       ).toThrow();
     });
