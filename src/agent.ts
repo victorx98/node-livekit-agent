@@ -46,21 +46,22 @@ export default defineAgent({
     const metrics = await getChildMetrics(env.serviceName, env.otelExporterOtlpEndpoint);
     const jobLabels = { provider: cfg.model_provider, model: cfg.model };
 
+    const roomName = resolveAssignedRoomName(ctx);
+
     const log = logger.child({
       job_id: cfg.job_id,
       interview_id: cfg.interview_id,
       provider: cfg.model_provider,
       model: cfg.model,
-      room: ctx.room.name,
+      room: roomName,
       metadata_source: extractedMetadata.source,
     });
 
-    const roomName = ctx.room.name ?? cfg.job_id;
     const store = new RedisStore(getRedis());
     const tracker = new RedisJobTracker(store);
 
     await tracker.create(cfg.job_id, {
-      room: ctx.room.name,
+      room: roomName,
       provider: cfg.model_provider,
       model: cfg.model,
       status: "starting",
@@ -146,7 +147,20 @@ export default defineAgent({
     try {
       await ctx.connect();
       await tracker.update(cfg.job_id, { status: "connected" });
-      log.info({ event: "room_connected" }, "agent connected to room");
+      log.info(
+        {
+          event: "room_connected",
+          assigned_room: roomName,
+          connected_room: ctx.room.name,
+        },
+        "agent connected to room",
+      );
+      if (ctx.room.name && ctx.room.name !== roomName) {
+        log.warn(
+          { event: "room_name_mismatch", assigned_room: roomName, connected_room: ctx.room.name },
+          "connected room name differs from assigned job room name",
+        );
+      }
 
       // Preflight + start recording before the interview. When recording is
       // required this throws on failure (caught below -> job_failed); otherwise
@@ -321,6 +335,17 @@ export default defineAgent({
     }
   },
 });
+
+export function resolveAssignedRoomName(ctx: {
+  job?: { id?: string; room?: { name?: string | null } | null } | null;
+  room?: { name?: string | null } | null;
+}): string {
+  const roomName = ctx.job?.room?.name?.trim() || ctx.room?.name?.trim();
+  if (roomName) return roomName;
+
+  const jobId = ctx.job?.id?.trim() || "unknown";
+  throw new Error(`Cannot resolve LiveKit room name for job ${jobId}`);
+}
 
 /**
  * Coarse failure reason for the interview_jobs_failed_total metric label. Kept
