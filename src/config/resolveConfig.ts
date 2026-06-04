@@ -2,7 +2,7 @@ import { AgentMetadataSchema } from "./schema.js";
 import type { ResolvedJobConfig, ModelProvider } from "../types/config.js";
 
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
-export const DEFAULT_GEMINI_MODEL = "gemini-live-2.5-flash-native-audio";
+export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 
 // Adapter from the LiveKit dispatch metadata to the internal ResolvedJobConfig
 // (§8.2–§8.4). Compatibility normalization lives here so downstream modules only
@@ -110,13 +110,20 @@ function normalizeMetadata(rawMetadata: unknown): Record<string, unknown> {
   const rawProvider =
     firstString(interviewData.model_provider, interviewData.modelProvider, top.provider) ?? "google";
   const modelProvider = normalizeProvider(rawProvider);
+  // Gemini: the model id is hardcoded server-side (GEMINI_MODEL env, else
+  // DEFAULT_GEMINI_MODEL). We intentionally ignore any model_name in the
+  // dispatch metadata because callers send LiveKit-style ids (e.g.
+  // "gemini-live-2.5-flash-native-audio") that the Gemini Live bidi API
+  // rejects as not-found. OpenAI still honors the metadata model_name.
   const modelName =
-    firstString(
-      interviewData.model_name,
-      interviewData.modelName,
-      top.model_name,
-      top.modelName,
-    ) ?? defaultModelForProvider(modelProvider);
+    modelProvider === "google"
+      ? defaultModelForProvider(modelProvider)
+      : firstString(
+          interviewData.model_name,
+          interviewData.modelName,
+          top.model_name,
+          top.modelName,
+        ) ?? defaultModelForProvider(modelProvider);
 
   const participantInfoInput = recordOrEmpty(top.participantInfo ?? top.participant_info);
   const participantInput = recordOrEmpty(interviewData.participant);
