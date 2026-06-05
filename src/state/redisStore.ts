@@ -13,6 +13,7 @@ const DEFAULT_FINALIZE_TTL_SECONDS = 24 * 60 * 60;
 
 const stateKey = (jobId: string): string => `iv:${jobId}:state`;
 const recoveryKey = (jobId: string): string => `iv:${jobId}:recovery`;
+const instructionKey = (jobId: string): string => `iv:${jobId}:instruction`;
 const transcriptKey = (jobId: string): string => `iv:${jobId}:transcript`;
 const jobKey = (jobId: string): string => `job:${jobId}`;
 const JOBS_INDEX = "jobs";
@@ -40,6 +41,16 @@ export class RedisStore {
   async getRecoverySnapshot(jobId: string): Promise<InterviewRecoverySnapshot | undefined> {
     const raw = await this.redis.get(recoveryKey(jobId));
     return raw ? (JSON.parse(raw) as InterviewRecoverySnapshot) : undefined;
+  }
+
+  // --- system instruction (debug) ---
+
+  async saveSystemInstruction(jobId: string, instruction: string): Promise<void> {
+    await this.redis.set(instructionKey(jobId), instruction);
+  }
+
+  async getSystemInstruction(jobId: string): Promise<string | undefined> {
+    return (await this.redis.get(instructionKey(jobId))) ?? undefined;
   }
 
   // --- transcript (append-only) ---
@@ -96,6 +107,7 @@ export class RedisStore {
     await Promise.all([
       this.redis.expire(stateKey(jobId), ttlSeconds),
       this.redis.expire(recoveryKey(jobId), ttlSeconds),
+      this.redis.expire(instructionKey(jobId), ttlSeconds),
       this.redis.expire(transcriptKey(jobId), ttlSeconds),
       this.redis.expire(jobKey(jobId), ttlSeconds),
     ]);

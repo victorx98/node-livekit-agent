@@ -70,6 +70,7 @@ export default defineAgent({
         instruction_sha256: createHash("sha256")
           .update(cfg.system_instruction, "utf8")
           .digest("hex"),
+        instruction_text: cfg.system_instruction,
         native_recovery: providerCapabilities.nativeRecovery,
       },
       "using API-authored interview instruction",
@@ -85,6 +86,7 @@ export default defineAgent({
       status: "starting",
     });
     await store.saveRecoverySnapshot(cfg.job_id, cfg.recovery_snapshot);
+    await store.saveSystemInstruction(cfg.job_id, cfg.system_instruction);
     metrics.jobStarted(jobLabels);
 
     // Deterministic interview state shared across reconnects, write-through to
