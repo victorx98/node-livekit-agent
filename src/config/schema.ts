@@ -9,6 +9,7 @@ export const AgentMetadataSchema = z.object({
   studentId: z.string().nullable(),
   participantId: z.string(),
   systemInstruction: z.string().optional().default(""),
+  greetingPrompt: z.string().optional().default(""),
   recordingKey: z.string().optional().default(""),
   options: z.object({
     autoStart: z.boolean().default(true),
@@ -25,12 +26,14 @@ export const AgentMetadataSchema = z.object({
     model_name: z.string(),
     interview_questions: z
       .array(
-        z.object({
-          question_text: z.string(),
-          purpose_and_focus: z.string().optional(),
-          sub_points: z.array(z.string()).optional(),
-          category: z.string().optional(),
-        }),
+        z
+          .object({
+            question_text: z.string(),
+            purpose_and_focus: z.string().optional(),
+            sub_points: z.array(z.string()).optional(),
+            category: z.string().optional(),
+          })
+          .passthrough(),
       )
       .default([]),
     systemInstruction: z.string().optional().default(""),

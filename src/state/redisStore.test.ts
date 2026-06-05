@@ -4,6 +4,7 @@ import type { Redis } from "ioredis";
 import { RedisStore } from "./redisStore.js";
 import { createInitialState } from "../interview/interviewState.js";
 import type { JobRecord } from "../types/tracker.js";
+import type { InterviewRecoverySnapshot } from "../types/config.js";
 
 function makeStore(): { store: RedisStore; client: Redis } {
   const client = new RedisMock() as unknown as Redis;
@@ -16,6 +17,19 @@ function sampleJob(jobId = "job_1"): JobRecord {
   return { jobId, room: "room_a", provider: "openai", status: "starting", startedAt: NOW };
 }
 
+function sampleRecoverySnapshot(): InterviewRecoverySnapshot {
+  return {
+    system_instruction: "API instruction",
+    questions: [{ question_text: "Question one" }],
+    language: "English",
+    interview_type: "technical",
+    position: "Engineer",
+    company: "MentorX",
+    duration_minutes: 30,
+    candidate: { name: "Candidate", background: "Backend experience" },
+  };
+}
+
 describe("RedisStore — interview state (§13)", () => {
   let store: RedisStore;
   beforeEach(() => {
@@ -26,7 +40,6 @@ describe("RedisStore — interview state (§13)", () => {
     const state = createInitialState({
       jobId: "job_1",
       interviewId: "int_1",
-      questionCount: 2,
       now: NOW,
     });
     await store.saveInterviewState(state);
@@ -35,6 +48,18 @@ describe("RedisStore — interview state (§13)", () => {
 
   it("returns undefined for unknown interview state", async () => {
     expect(await store.getInterviewState("missing")).toBeUndefined();
+  });
+});
+
+describe("RedisStore - recovery snapshot", () => {
+  it("round-trips the API-authored recovery snapshot from its dedicated key", async () => {
+    const { store } = makeStore();
+    const snapshot = sampleRecoverySnapshot();
+
+    await store.saveRecoverySnapshot("job_1", snapshot);
+
+    expect(await store.getRecoverySnapshot("job_1")).toEqual(snapshot);
+    expect(await store.getRecoverySnapshot("missing")).toBeUndefined();
   });
 });
 
@@ -91,10 +116,10 @@ describe("RedisStore — finalize + crash survival", () => {
     const state = createInitialState({
       jobId: "job_1",
       interviewId: "int_1",
-      questionCount: 1,
       now: NOW,
     });
     await store.saveInterviewState(state);
+    await store.saveRecoverySnapshot("job_1", sampleRecoverySnapshot());
     await store.appendTranscript({
       jobId: "job_1",
       interviewId: "int_1",
@@ -108,6 +133,7 @@ describe("RedisStore — finalize + crash survival", () => {
 
     expect(await store.getInterviewState("job_1")).toEqual(state);
     expect(await client.ttl("iv:job_1:state")).toBeGreaterThan(0);
+    expect(await client.ttl("iv:job_1:recovery")).toBeGreaterThan(0);
     expect(await client.ttl("iv:job_1:transcript")).toBeGreaterThan(0);
   });
 
@@ -117,7 +143,6 @@ describe("RedisStore — finalize + crash survival", () => {
     const state = createInitialState({
       jobId: "job_1",
       interviewId: "int_1",
-      questionCount: 1,
       now: NOW,
     });
     await writer.saveInterviewState(state);

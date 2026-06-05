@@ -30,15 +30,40 @@ if (!url || !apiKey || !apiSecret) {
 
 const room = process.argv[2] ?? `interview-test-${Date.now()}`;
 
-// A realistic AgentMetadata payload (§8.1). Defaults mirror the worker's model
-// fallbacks. Override DISPATCH_MODEL_PROVIDER and DISPATCH_MODEL_NAME for manual
-// provider verification.
+const interviewQuestions = [
+  {
+    question_text: "Tell me about a backend system you've built and your role in it.",
+    purpose_and_focus: "Warm-up; gauge depth and ownership.",
+    sub_points: ["scale", "your specific contribution"],
+    category: "background",
+  },
+  {
+    question_text: "How would you debug a sudden spike in production API latency?",
+    purpose_and_focus: "Problem-solving and systematic thinking.",
+    category: "problem-solving",
+  },
+  {
+    question_text: "How do you decide between SQL and NoSQL for a new service?",
+    category: "system-design",
+  },
+];
+
+const systemInstruction = `
+You are a friendly, professional technical interviewer.
+Complete the interview in English and keep questions concise and spoken.
+Ask the following questions in order, using their private context for brief follow-ups:
+${JSON.stringify(interviewQuestions)}
+Thank the candidate and end politely after the final question.
+`.trim();
+
+// A realistic API-shaped AgentMetadata payload (§8.1). The systemInstruction
+// contains the complete interview plan; structured interviewData is retained
+// only for operations and durable recovery.
 const metadata = {
   interviewId: "int_demo",
   studentId: "stu_demo",
   participantId: "part_demo",
-  systemInstruction:
-    "You are a friendly, professional technical interviewer. Keep questions concise and spoken.",
+  systemInstruction,
   recordingKey: "",
   options: { autoStart: true, enableLogging: true, enableRecording: false },
   participantInfo: { name: "Candidate", email: null },
@@ -63,24 +88,8 @@ const metadata = {
     status: "scheduled",
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    systemInstruction: "",
-    interview_questions: [
-      {
-        question_text: "Tell me about a backend system you've built and your role in it.",
-        purpose_and_focus: "Warm-up; gauge depth and ownership.",
-        sub_points: ["scale", "your specific contribution"],
-        category: "background",
-      },
-      {
-        question_text: "How would you debug a sudden spike in production API latency?",
-        purpose_and_focus: "Problem-solving and systematic thinking.",
-        category: "problem-solving",
-      },
-      {
-        question_text: "How do you decide between SQL and NoSQL for a new service?",
-        category: "system-design",
-      },
-    ],
+    systemInstruction,
+    interview_questions: interviewQuestions,
   },
 };
 

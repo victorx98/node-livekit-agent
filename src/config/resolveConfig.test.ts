@@ -1,427 +1,251 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { resolveJobConfig } from "./resolveConfig.js";
 import { sampleAgentMetadata } from "./sampleMetadata.js";
 import type { AgentMetadata } from "../types/job.js";
 
 const JOB_ID = "job_from_context_123";
 
-/** Stringify metadata the way it arrives on the wire (LiveKit job.metadata). */
-function wire(meta: unknown): string {
-  return JSON.stringify(meta);
+function resolveSample(mutate?: (metadata: AgentMetadata) => void) {
+  const metadata = sampleAgentMetadata();
+  mutate?.(metadata);
+  return resolveJobConfig(JSON.stringify(metadata), JOB_ID);
 }
 
-function resolveSample(mutate?: (m: AgentMetadata) => void) {
-  const m = sampleAgentMetadata();
-  mutate?.(m);
-  return resolveJobConfig(wire(m), JOB_ID);
-}
+describe("resolveJobConfig - API-authoritative interview execution", () => {
+  it("maps operational identity, provider, duration, recording, and options", () => {
+    const cfg = resolveSample();
 
-describe("resolveJobConfig — §8.3 wire → internal mapping", () => {
-  describe("happy path: full §6 example maps every field per the table", () => {
-    it("maps identity fields", () => {
-      const cfg = resolveSample();
-      // job_id is NOT on the wire — it comes from JobContext (room/job id).
-      expect(cfg.job_id).toBe(JOB_ID);
-      expect(cfg.interview_id).toBe("int_789");
-      expect(cfg.student_id).toBe("stu_456");
-      expect(cfg.participant_id).toBe("part_001");
-    });
-
-    it("maps provider selection and language", () => {
-      const cfg = resolveSample();
-      expect(cfg.model_provider).toBe("openai");
-      expect(cfg.model).toBe("gpt-realtime-2");
-      expect(cfg.language).toBe("en-US");
-    });
-
-    it("maps interview content", () => {
-      const cfg = resolveSample();
-      expect(cfg.interview.role).toBe("Node.js Backend Engineer");
-      expect(cfg.interview.type).toBe("technical");
-      expect(cfg.interview.company).toBe("MentorX");
-      expect(cfg.interview.duration_minutes).toBe(60);
-      expect(cfg.interview.system_prompt).toBe("You are a professional technical interviewer...");
-      expect(cfg.interview.student.name).toBe("Jordan Lee");
-      expect(cfg.interview.participant.name).toBe("Jordan Lee");
-    });
-
-    it("derives interview.title as 'position @ company (type)'", () => {
-      const cfg = resolveSample();
-      expect(cfg.interview.title).toBe("Node.js Backend Engineer @ MentorX (technical)");
-    });
-
-    it("passes structured InterviewQuestion[] through intact", () => {
-      const cfg = resolveSample();
-      expect(cfg.interview.questions).toHaveLength(2);
-      expect(cfg.interview.questions[0]).toEqual({
-        question_text: "Tell me about your backend experience.",
-        purpose_and_focus: "Warm-up; gauge depth.",
-        sub_points: ["scale", "ownership"],
-        category: "background",
-      });
-      expect(cfg.interview.questions[1]).toEqual({
-        question_text: "How would you debug a production latency issue?",
-        category: "problem-solving",
-      });
-    });
-
-    it("maps recording wire fields", () => {
-      const cfg = resolveSample();
-      expect(cfg.recording.enabled).toBe(true); // options.enableRecording
-      expect(cfg.recording.key).toBe("livekit-interviews/int_789/job_123.mp4");
-    });
-
-    it("maps behavior option flags", () => {
-      const cfg = resolveSample();
-      expect(cfg.options.autoStart).toBe(true);
-      expect(cfg.options.enableLogging).toBe(true);
+    expect(cfg).toMatchObject({
+      job_id: JOB_ID,
+      interview_id: "int_789",
+      student_id: "stu_456",
+      participant_id: "part_001",
+      model_provider: "openai",
+      model: "gpt-realtime-2",
+      duration_minutes: 60,
+      recording: {
+        enabled: true,
+        key: "livekit-interviews/int_789/job_123.mp4",
+      },
+      options: {
+        autoStart: true,
+        enableLogging: true,
+      },
     });
   });
 
-  describe("provider normalization", () => {
-    it.each([
-      ["openai", "openai"],
-      ["OpenAI", "openai"],
-      ["OPENAI", "openai"],
-      ["google", "google"],
-      ["Google", "google"],
-      ["gemini", "google"],
-      ["GEMINI", "google"],
-    ])("normalizes %s → %s", (input, expected) => {
-      const cfg = resolveSample((m) => {
-        m.interviewData.model_provider = input;
-      });
-      expect(cfg.model_provider).toBe(expected);
+  it("preserves the top-level systemInstruction byte-for-byte", () => {
+    const instruction = "\n  API-authored instruction with deliberate spacing.  \n";
+    const cfg = resolveSample((metadata) => {
+      metadata.systemInstruction = instruction;
+      metadata.interviewData.systemInstruction = "INNER";
     });
 
-    it("throws on an unknown provider", () => {
-      expect(() =>
-        resolveSample((m) => {
-          m.interviewData.model_provider = "anthropic";
-        }),
-      ).toThrow(/anthropic/i);
+    expect(cfg.system_instruction).toBe(instruction);
+    expect(cfg.recovery_snapshot.system_instruction).toBe(instruction);
+  });
+
+  it("falls back to the nested instruction and preserves it byte-for-byte", () => {
+    const instruction = "\nNested API instruction\n";
+    const cfg = resolveSample((metadata) => {
+      metadata.systemInstruction = "   ";
+      metadata.interviewData.systemInstruction = instruction;
+    });
+
+    expect(cfg.system_instruction).toBe(instruction);
+  });
+
+  it("fails before runtime startup when no usable instruction exists", () => {
+    expect(() =>
+      resolveSample((metadata) => {
+        metadata.systemInstruction = "";
+        metadata.interviewData.systemInstruction = " \n ";
+      }),
+    ).toThrow(/non-empty systemInstruction/i);
+  });
+
+  it("does not transform instructions when interview intelligence fields change", () => {
+    const instruction = "Use only this API-authored interview plan.";
+    const first = resolveSample((metadata) => {
+      metadata.systemInstruction = instruction;
+    });
+    const second = resolveSample((metadata) => {
+      metadata.systemInstruction = instruction;
+      metadata.interviewData.language = "Chinese";
+      metadata.interviewData.position = "Completely Different Role";
+      metadata.interviewData.company = "Different Company";
+      metadata.interviewData.interview_questions = [
+        { question_text: "A replacement recovery-only question" },
+      ];
+      metadata.interviewData.student.name = "Different Candidate";
+    });
+
+    expect(first.system_instruction).toBe(instruction);
+    expect(second.system_instruction).toBe(instruction);
+  });
+
+  it("creates an immutable recovery snapshot without email or status fields", () => {
+    const cfg = resolveSample();
+    const snapshot = cfg.recovery_snapshot;
+
+    expect(snapshot).toEqual({
+      system_instruction: "You are a professional technical interviewer...",
+      questions: [
+        {
+          question_text: "Tell me about your backend experience.",
+          purpose_and_focus: "Warm-up; gauge depth.",
+          sub_points: ["scale", "ownership"],
+          category: "background",
+        },
+        {
+          question_text: "How would you debug a production latency issue?",
+          category: "problem-solving",
+        },
+      ],
+      language: "en-US",
+      interview_type: "technical",
+      position: "Node.js Backend Engineer",
+      company: "MentorX",
+      duration_minutes: 60,
+      candidate: {
+        name: "Jordan Lee",
+        background: "CS senior, 2 internships",
+        experience_level: "entry",
+      },
+    });
+    expect(JSON.stringify(snapshot)).not.toContain("jordan@example.com");
+    expect(JSON.stringify(snapshot)).not.toContain("scheduled");
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(snapshot.questions)).toBe(true);
+    expect(Object.isFrozen(snapshot.candidate)).toBe(true);
+  });
+
+  it("preserves additional question fields in the recovery snapshot", () => {
+    const cfg = resolveSample((metadata) => {
+      metadata.interviewData.interview_questions = [
+        {
+          question_text: "Describe the result.",
+          expected_answer_time_minutes: 2,
+          expected_answer_words: 260,
+        },
+      ];
+    });
+
+    expect(cfg.recovery_snapshot.questions[0]).toMatchObject({
+      question_text: "Describe the result.",
+      expected_answer_time_minutes: 2,
+      expected_answer_words: 260,
     });
   });
 
-  describe("system_prompt fallback (prefer top-level)", () => {
-    it("uses the top-level systemInstruction when present", () => {
-      const cfg = resolveSample((m) => {
-        m.systemInstruction = "TOP-LEVEL PROMPT";
-        m.interviewData.systemInstruction = "INNER PROMPT";
-      });
-      expect(cfg.interview.system_prompt).toBe("TOP-LEVEL PROMPT");
-    });
+  it("supports Python greeting aliases and the Python default", () => {
+    expect(resolveSample().greeting_prompt).toBe(
+      "Please greet the candidate and begin the interview.",
+    );
 
-    it("falls back to interviewData.systemInstruction when top-level is empty", () => {
-      const cfg = resolveSample((m) => {
-        m.systemInstruction = "";
-        m.interviewData.systemInstruction = "INNER PROMPT";
-      });
-      expect(cfg.interview.system_prompt).toBe("INNER PROMPT");
-    });
+    const cfg = resolveJobConfig(
+      {
+        ...sampleAgentMetadata(),
+        greeting_prompt: "Begin with the API-provided welcome.",
+        greetingPrompt: undefined,
+      },
+      JOB_ID,
+    );
+    expect(cfg.greeting_prompt).toBe("Begin with the API-provided welcome.");
   });
 
-  describe("env-sourced fields (not on the wire)", () => {
-    it("reads voice and realtime tuning from env", () => {
-      vi.stubEnv("DEFAULT_VOICE", "marin");
-      vi.stubEnv("TURN_DETECTION", "server_vad");
-      vi.stubEnv("SILENCE_DURATION_MS", "900");
-      vi.stubEnv("INTERRUPT_RESPONSE", "false");
-      vi.stubEnv("THINKING_LEVEL", "high");
-
-      const cfg = resolveSample();
-      expect(cfg.voice).toBe("marin");
-      expect(cfg.realtime.turn_detection).toBe("server_vad");
-      expect(cfg.realtime.silence_duration_ms).toBe(900);
-      expect(cfg.realtime.interrupt_response).toBe(false);
-      expect(cfg.realtime.thinking_level).toBe("high");
+  it.each([
+    ["openai", "openai"],
+    ["OPENAI", "openai"],
+    ["google", "google"],
+    ["Gemini", "google"],
+  ])("normalizes provider %s to %s", (provider, expected) => {
+    const cfg = resolveSample((metadata) => {
+      metadata.interviewData.model_provider = provider;
     });
-
-    it("applies realtime defaults when env is unset", () => {
-      vi.stubEnv("DEFAULT_VOICE", "");
-      vi.stubEnv("TURN_DETECTION", "");
-      vi.stubEnv("SILENCE_DURATION_MS", "");
-      vi.stubEnv("INTERRUPT_RESPONSE", "");
-      vi.stubEnv("THINKING_LEVEL", "");
-
-      const cfg = resolveSample();
-      expect(cfg.realtime.turn_detection).toBe("semantic_vad");
-      expect(cfg.realtime.silence_duration_ms).toBe(700);
-      expect(cfg.realtime.interrupt_response).toBe(true);
-      expect(cfg.realtime.thinking_level).toBe("minimal");
-    });
-
-    it("reads recording env policy fields", () => {
-      vi.stubEnv("RECORDING_REQUIRED", "true");
-      vi.stubEnv("RECORDING_S3_BUCKET", "my-bucket");
-      vi.stubEnv("AWS_REGION", "us-east-1");
-      vi.stubEnv("RECORDING_AUDIO_ONLY", "true");
-
-      const cfg = resolveSample();
-      expect(cfg.recording.required).toBe(true);
-      expect(cfg.recording.s3_bucket).toBe("my-bucket");
-      expect(cfg.recording.s3_region).toBe("us-east-1");
-      expect(cfg.recording.audio_only).toBe(true);
-    });
-
-    it("defaults recording.required to false when RECORDING_REQUIRED is not 'true'", () => {
-      vi.stubEnv("RECORDING_REQUIRED", "");
-      const cfg = resolveSample();
-      expect(cfg.recording.required).toBe(false);
-    });
-
-    it("uses S3_BUCKET when RECORDING_S3_BUCKET is unset", () => {
-      vi.stubEnv("RECORDING_S3_BUCKET", "");
-      vi.stubEnv("S3_BUCKET", "python-era-bucket");
-
-      const cfg = resolveSample();
-      expect(cfg.recording.s3_bucket).toBe("python-era-bucket");
-    });
+    expect(cfg.model_provider).toBe(expected);
   });
 
-  describe("compatibility normalization and optional/missing wire fields", () => {
-    it("defaults missing systemInstruction and recordingKey to empty strings", () => {
-      const cfg = resolveSample((m) => {
-        delete (m as Partial<AgentMetadata>).systemInstruction;
-        delete (m as Partial<AgentMetadata>).recordingKey;
-        m.interviewData.systemInstruction = "";
-      });
-      expect(cfg.interview.system_prompt).toBe("");
-      expect(cfg.recording.key).toBe("");
-    });
-
-    it("defaults missing interview_questions to []", () => {
-      const cfg = resolveSample((m) => {
-        delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).interview_questions;
-      });
-      expect(cfg.interview.questions).toEqual([]);
-    });
-
-    it("defaults interview_type/company/language when missing", () => {
-      const cfg = resolveSample((m) => {
-        const d = m.interviewData as Partial<AgentMetadata["interviewData"]>;
-        delete d.interview_type;
-        delete d.company;
-        delete d.language;
-      });
-      expect(cfg.interview.type).toBe("general");
-      expect(cfg.interview.company).toBe("");
-      expect(cfg.language).toBe("en-US");
-    });
-
-    it("defaults options flags (autoStart/enableLogging true, enableRecording false)", () => {
-      const cfg = resolveSample((m) => {
-        m.options = {} as AgentMetadata["options"];
-      });
-      expect(cfg.options.autoStart).toBe(true);
-      expect(cfg.options.enableLogging).toBe(true);
-      expect(cfg.recording.enabled).toBe(false);
-    });
-
-    it("derives options.enableRecording from top-level enableRecording", () => {
-      const cfg = resolveSample((m) => {
-        delete (m as Partial<AgentMetadata>).options;
-        (m as unknown as Record<string, unknown>).enableRecording = true;
-      });
-
-      expect(cfg.recording.enabled).toBe(true);
-    });
-
-    it("derives title without company as 'position (type)'", () => {
-      const cfg = resolveSample((m) => {
-        m.interviewData.company = "";
-      });
-      expect(cfg.interview.title).toBe("Node.js Backend Engineer (technical)");
-    });
-
-    it("accepts snake_case top-level metadata and modelProvider aliases", () => {
-      const canonical = sampleAgentMetadata();
-      const meta: Record<string, unknown> = {
-        interview_id: canonical.interviewId,
+  it("accepts snake_case metadata while retaining the authoritative instruction", () => {
+    const sample = sampleAgentMetadata();
+    const cfg = resolveJobConfig(
+      {
+        interview_id: sample.interviewId,
         interview_data: {
-          ...canonical.interviewData,
+          ...sample.interviewData,
           model_provider: undefined,
           modelProvider: "Gemini",
+          systemInstruction: "",
         },
         student_id: null,
         participant_id: "snake-participant",
-        participant_info: canonical.participantInfo,
-        system_instruction: "snake prompt",
+        participant_info: sample.participantInfo,
+        system_instruction: "snake instruction",
         recording_key: "snake/path.mp4",
         options: { autoStart: false, enableLogging: false, enableRecording: true },
-      };
+      },
+      JOB_ID,
+    );
 
-      const cfg = resolveJobConfig(meta, JOB_ID);
-
-      expect(cfg.interview_id).toBe(canonical.interviewId);
-      expect(cfg.student_id).toBeNull();
-      expect(cfg.participant_id).toBe("snake-participant");
-      expect(cfg.model_provider).toBe("google");
-      expect(cfg.interview.system_prompt).toBe("snake prompt");
-      expect(cfg.recording.key).toBe("snake/path.mp4");
-      expect(cfg.options.autoStart).toBe(false);
-      expect(cfg.options.enableLogging).toBe(false);
-    });
-
-    it("accepts Python README-style minimal metadata", () => {
-      const cfg = resolveJobConfig(
-        {
-          interviewId: "456",
-          interviewData: {
-            job_title: "Senior Software Engineer",
-            questions: ["Tell me about yourself", "What are your strengths?"],
-            model_provider: "google",
-          },
-          enableRecording: true,
-          options: { autoStart: true },
-        },
-        "job_python_minimal",
-      );
-
-      expect(cfg.interview_id).toBe("456");
-      expect(cfg.student_id).toBeNull();
-      expect(cfg.participant_id).toBe("participant");
-      expect(cfg.model_provider).toBe("google");
-      expect(cfg.model).toBe("gemini-2.5-flash-native-audio-preview-12-2025");
-      expect(cfg.interview.role).toBe("Senior Software Engineer");
-      expect(cfg.interview.duration_minutes).toBe(30);
-      expect(cfg.interview.participant).toEqual({ name: "Participant", email: null });
-      expect(cfg.interview.questions).toEqual([
-        { question_text: "Tell me about yourself" },
-        { question_text: "What are your strengths?" },
-      ]);
-      expect(cfg.recording.enabled).toBe(true);
-    });
-
-    it("accepts JSON-stringified interview_data and falls back to OPENAI_MODEL", () => {
-      vi.stubEnv("OPENAI_MODEL", "gpt-realtime-2");
-
-      const cfg = resolveJobConfig(
-        {
-          interview_id: "json-inner",
-          interview_data: JSON.stringify({
-            job_title: "Platform Engineer",
-            questions: ["How do you debug latency?"],
-            modelProvider: "openai",
-          }),
-        },
-        "job_json_inner",
-      );
-
-      expect(cfg.model_provider).toBe("openai");
-      expect(cfg.model).toBe("gpt-realtime-2");
-      expect(cfg.interview.role).toBe("Platform Engineer");
-      expect(cfg.interview.questions).toEqual([{ question_text: "How do you debug latency?" }]);
-    });
-
-    it("accepts success-story metadata without position or job_title", () => {
-      const cfg = resolveJobConfig(
-        {
-          interviewId: "success-story-123",
-          interviewData: {
-            interview_type: "success_story",
-            model_provider: "openai",
-            questions: [
-              "What changed for you after joining the program?",
-              "Which support was most useful?",
-            ],
-          },
-          participantInfo: { name: "Casey", email: null },
-          systemInstruction: "Interview the participant for a student success story.",
-          options: { autoStart: true },
-        },
-        "job_success_story",
-      );
-
-      expect(cfg.interview_id).toBe("success-story-123");
-      expect(cfg.interview.title).toBe("success_story");
-      expect(cfg.interview.role).toBe("");
-      expect(cfg.interview.system_prompt).toBe(
-        "Interview the participant for a student success story.",
-      );
-      expect(cfg.interview.participant).toEqual({ name: "Casey", email: null });
-      expect(cfg.interview.questions).toEqual([
-        { question_text: "What changed for you after joining the program?" },
-        { question_text: "Which support was most useful?" },
-      ]);
-    });
-
-    it("derives title from company and interview_type when role is missing", () => {
-      const cfg = resolveSample((m) => {
-        delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).position;
-        m.interviewData.company = "MentorX";
-        m.interviewData.interview_type = "success_story";
-      });
-
-      expect(cfg.interview.title).toBe("MentorX (success_story)");
-      expect(cfg.interview.role).toBe("");
-    });
-
-    it("falls back to requested default models when metadata omits model_name", () => {
-      const openaiCfg = resolveSample((m) => {
-        m.interviewData.model_provider = "openai";
-        delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).model_name;
-      });
-      const geminiCfg = resolveSample((m) => {
-        m.interviewData.model_provider = "google";
-        delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).model_name;
-      });
-
-      expect(openaiCfg.model).toBe("gpt-realtime-2");
-      expect(geminiCfg.model).toBe("gemini-2.5-flash-native-audio-preview-12-2025");
-    });
-
-    it("uses OPENAI_MODEL and GEMINI_MODEL env fallbacks when present", () => {
-      vi.stubEnv("OPENAI_MODEL", "gpt-realtime-env");
-      vi.stubEnv("GEMINI_MODEL", "gemini-env");
-
-      const openaiCfg = resolveSample((m) => {
-        m.interviewData.model_provider = "openai";
-        delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).model_name;
-      });
-      const geminiCfg = resolveSample((m) => {
-        m.interviewData.model_provider = "google";
-        delete (m.interviewData as Partial<AgentMetadata["interviewData"]>).model_name;
-      });
-
-      expect(openaiCfg.model).toBe("gpt-realtime-env");
-      expect(geminiCfg.model).toBe("gemini-env");
-    });
+    expect(cfg.system_instruction).toBe("snake instruction");
+    expect(cfg.model_provider).toBe("google");
+    expect(cfg.recording.key).toBe("snake/path.mp4");
+    expect(cfg.options.autoStart).toBe(false);
   });
 
-  describe("invalid input / error paths", () => {
-    it("throws on malformed JSON", () => {
-      expect(() => resolveJobConfig("{ not valid json", JOB_ID)).toThrow();
-    });
+  it("accepts JSON-stringified interview_data and Python-style question strings", () => {
+    const cfg = resolveJobConfig(
+      {
+        interview_id: "json-inner",
+        system_instruction: "Interview exactly as specified here.",
+        interview_data: JSON.stringify({
+          job_title: "Platform Engineer",
+          questions: ["How do you debug latency?"],
+          modelProvider: "openai",
+        }),
+      },
+      JOB_ID,
+    );
 
-    it("throws when durationMins is zero or negative", () => {
-      expect(() =>
-        resolveSample((m) => {
-          m.interviewData.durationMins = 0;
-        }),
-      ).toThrow();
-      expect(() =>
-        resolveSample((m) => {
-          m.interviewData.durationMins = -5;
-        }),
-      ).toThrow();
-    });
-
-    it("throws when required interviewId is missing", () => {
-      expect(() =>
-        resolveSample((m) => {
-          delete (m as Partial<AgentMetadata>).interviewId;
-        }),
-      ).toThrow();
-    });
+    expect(cfg.system_instruction).toBe("Interview exactly as specified here.");
+    expect(cfg.recovery_snapshot.position).toBe("Platform Engineer");
+    expect(cfg.recovery_snapshot.questions).toEqual([
+      { question_text: "How do you debug latency?" },
+    ]);
   });
 
-  describe("student_id may be null", () => {
-    it("preserves a null studentId", () => {
-      const cfg = resolveSample((m) => {
-        m.studentId = null;
-      });
-      expect(cfg.student_id).toBeNull();
+  it("reads realtime and recording policy from environment", () => {
+    vi.stubEnv("DEFAULT_VOICE", "marin");
+    vi.stubEnv("TURN_DETECTION", "server_vad");
+    vi.stubEnv("SILENCE_DURATION_MS", "900");
+    vi.stubEnv("INTERRUPT_RESPONSE", "false");
+    vi.stubEnv("THINKING_LEVEL", "high");
+    vi.stubEnv("RECORDING_REQUIRED", "true");
+    vi.stubEnv("RECORDING_S3_BUCKET", "bucket");
+
+    const cfg = resolveSample();
+    expect(cfg.voice).toBe("marin");
+    expect(cfg.realtime).toEqual({
+      turn_detection: "server_vad",
+      silence_duration_ms: 900,
+      interrupt_response: false,
+      thinking_level: "high",
     });
+    expect(cfg.recording.required).toBe(true);
+    expect(cfg.recording.s3_bucket).toBe("bucket");
+  });
+
+  it("rejects malformed metadata, unsupported providers, and invalid durations", () => {
+    expect(() => resolveJobConfig("{ not valid json", JOB_ID)).toThrow();
+    expect(() =>
+      resolveSample((metadata) => {
+        metadata.interviewData.model_provider = "anthropic";
+      }),
+    ).toThrow(/anthropic/i);
+    expect(() =>
+      resolveSample((metadata) => {
+        metadata.interviewData.durationMins = 0;
+      }),
+    ).toThrow();
   });
 });

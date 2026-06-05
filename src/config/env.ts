@@ -34,6 +34,8 @@ export interface Env {
 
   // reconnect/reseed (§13)
   reconnectMaxRetries: number;
+  recoveryMaxTurns: number;
+  recoveryMaxChars: number;
 
   // Realtime audio: how long the framework waits for the model's first audio
   // frame before giving up on a response. The default (10s) is tuned for TTS;
@@ -88,6 +90,14 @@ function intOr(source: EnvSource, name: string, fallback: number): number {
   return n;
 }
 
+function positiveIntOr(source: EnvSource, name: string, fallback: number): number {
+  const value = intOr(source, name, fallback);
+  if (value <= 0) {
+    throw new Error(`Invalid positive integer for ${name}: ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
 function optionalPositiveIntString(source: EnvSource, name: string): string | undefined {
   const raw = str(source, name);
   if (raw === undefined) return undefined;
@@ -128,6 +138,8 @@ export function loadEnv(source: EnvSource = process.env): Env {
     webhookRetryBaseMs: intOr(source, "WEBHOOK_RETRY_BASE_MS", 1000),
 
     reconnectMaxRetries: intOr(source, "RECONNECT_MAX_RETRIES", 3),
+    recoveryMaxTurns: positiveIntOr(source, "RECOVERY_MAX_TURNS", 24),
+    recoveryMaxChars: positiveIntOr(source, "RECOVERY_MAX_CHARS", 24_000),
     forwardAudioIdleTimeoutMs: intOr(source, "FORWARD_AUDIO_IDLE_TIMEOUT_MS", 300_000),
 
     recordingRequired: boolOr(source, "RECORDING_REQUIRED", false),

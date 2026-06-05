@@ -26,6 +26,9 @@ const baseEnv: Env = {
   webhookMaxRetries: 3,
   webhookRetryBaseMs: 1000,
   reconnectMaxRetries: 3,
+  recoveryMaxTurns: 24,
+  recoveryMaxChars: 24_000,
+  forwardAudioIdleTimeoutMs: 300_000,
   recordingRequired: false,
   monitoringPort: 8080,
   monitoringHost: "127.0.0.1",
@@ -41,6 +44,7 @@ function cfgFrom(mutate?: (m: AgentMetadata) => void): ResolvedJobConfig {
 
 function googleOptions(model: llm.RealtimeModel): {
   contextWindowCompression?: unknown;
+  instructions?: string;
   language?: unknown;
   realtimeInputConfig?: {
     automaticActivityDetection?: { silenceDurationMs?: number };
@@ -51,6 +55,7 @@ function googleOptions(model: llm.RealtimeModel): {
     model as unknown as {
       _options: {
         contextWindowCompression?: unknown;
+        instructions?: string;
         language?: unknown;
         realtimeInputConfig?: {
           automaticActivityDetection?: { silenceDurationMs?: number };
@@ -89,17 +94,64 @@ describe("realtime provider registry", () => {
 
     expect(model).toBeInstanceOf(llm.RealtimeModel);
     expect(model.model).toBe("gemini-2.5-flash-native-audio-preview-12-2025");
+    expect(googleOptions(model).instructions).toBe("Interview clearly.");
     expect(googleOptions(model).contextWindowCompression).toEqual({ slidingWindow: {} });
-    // Native-audio models reject an explicit languageCode, so it is omitted.
+    // Language is API-authored interview intelligence and is never separately
+    // injected into the provider.
     expect(googleOptions(model).language).toBeUndefined();
     // End-of-speech detection is configured (otherwise Gemini lags by tens of
     // seconds). silenceDurationMs comes from cfg.realtime (default 700).
-    expect(googleOptions(model).realtimeInputConfig?.automaticActivityDetection?.silenceDurationMs).toBe(
-      700,
-    );
+    expect(
+      googleOptions(model).realtimeInputConfig?.automaticActivityDetection?.silenceDurationMs,
+    ).toBe(700);
     expect(googleOptions(model).realtimeInputConfig?.activityHandling).toBe(
       "START_OF_ACTIVITY_INTERRUPTS",
     );
+  });
+
+  it("does not inject metadata language even for a non-native-audio Gemini model", () => {
+    const cfg = cfgFrom((m) => {
+      m.interviewData.model_provider = "google";
+      m.interviewData.language = "Chinese";
+    });
+    cfg.model = "gemini-2.0-flash-live-001";
+
+    const model = createRealtimeModel({
+      cfg,
+      env: baseEnv,
+      instructions: "请严格执行 API 指令。",
+    });
+
+    expect(googleOptions(model).language).toBeUndefined();
+  });
+
+  it("reports model-specific native recovery and greeting capabilities", () => {
+    const openaiCfg = cfgFrom((m) => {
+      m.interviewData.model_provider = "openai";
+    });
+    expect(
+      getRealtimeProvider(openaiCfg.model_provider).capabilities({
+        cfg: openaiCfg,
+        env: baseEnv,
+      }),
+    ).toEqual({
+      nativeRecovery: "chat_context_replay",
+      supportsProgrammaticGreeting: true,
+    });
+
+    const googleCfg = cfgFrom((m) => {
+      m.interviewData.model_provider = "google";
+    });
+    googleCfg.model = "gemini-3.1-flash-live-preview";
+    expect(
+      getRealtimeProvider(googleCfg.model_provider).capabilities({
+        cfg: googleCfg,
+        env: baseEnv,
+      }),
+    ).toEqual({
+      nativeRecovery: "session_resumption",
+      supportsProgrammaticGreeting: false,
+    });
   });
 
   it("allows Gemini long durations when Google auth is valid", () => {

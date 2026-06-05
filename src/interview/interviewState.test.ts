@@ -1,68 +1,65 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  createInitialState,
   appendTurn,
+  createInitialState,
   RECENT_TURNS_LIMIT,
   type InterviewState,
 } from "./interviewState.js";
 
 const NOW = "2026-06-01T10:00:00.000Z";
 
-function initial(questionCount = 3): InterviewState {
+function initial(): InterviewState {
   return createInitialState({
     jobId: "job_1",
     interviewId: "int_1",
-    questionCount,
     now: NOW,
   });
 }
 
 describe("createInitialState (§13)", () => {
-  it("starts at question 0 with all topics unanswered and empty turns", () => {
-    const s = initial(3);
-    expect(s.jobId).toBe("job_1");
-    expect(s.interviewId).toBe("int_1");
-    expect(s.currentQuestionIndex).toBe(0);
-    expect(s.askedQuestionIds).toEqual([]);
-    expect(s.unansweredTopics).toEqual([0, 1, 2]);
-    expect(s.notes).toEqual([]);
-    expect(s.recentTurns).toEqual([]);
-    expect(s.stats).toEqual({
-      turns: 0,
-      reconnects: 0,
-      startedAt: NOW,
-      lastActivityAt: NOW,
+  it("stores only durable conversation and lifecycle state", () => {
+    const state = initial();
+    expect(state).toEqual({
+      jobId: "job_1",
+      interviewId: "int_1",
+      recentTurns: [],
+      stats: {
+        turns: 0,
+        reconnects: 0,
+        startedAt: NOW,
+        lastActivityAt: NOW,
+      },
     });
-  });
-
-  it("has no unanswered topics when there are no planned questions", () => {
-    expect(initial(0).unansweredTopics).toEqual([]);
+    expect(state).not.toHaveProperty("askedQuestionIds");
+    expect(state).not.toHaveProperty("unansweredTopics");
   });
 });
 
 describe("appendTurn (§13)", () => {
   it("records the turn, increments the count, and advances lastActivityAt", () => {
-    const s0 = initial();
+    const state = initial();
     const at = "2026-06-01T10:01:00.000Z";
-    const s1 = appendTurn(s0, { role: "interviewer", text: "Hello", at });
+    const next = appendTurn(state, { role: "interviewer", text: "Hello", at });
 
-    expect(s1.recentTurns).toEqual([{ role: "interviewer", text: "Hello", at }]);
-    expect(s1.stats.turns).toBe(1);
-    expect(s1.stats.lastActivityAt).toBe(at);
-    // immutability: original state is untouched
-    expect(s0.recentTurns).toEqual([]);
-    expect(s0.stats.turns).toBe(0);
+    expect(next.recentTurns).toEqual([{ role: "interviewer", text: "Hello", at }]);
+    expect(next.stats.turns).toBe(1);
+    expect(next.stats.lastActivityAt).toBe(at);
+    expect(state.recentTurns).toEqual([]);
   });
 
-  it("keeps only the most recent turns in the ring buffer", () => {
-    let s = initial();
+  it("keeps only the most recent turns in the in-memory fallback buffer", () => {
+    let state = initial();
     const total = RECENT_TURNS_LIMIT + 3;
-    for (let i = 1; i <= total; i++) {
-      s = appendTurn(s, { role: "candidate", text: `turn ${i}`, at: NOW });
+    for (let index = 1; index <= total; index += 1) {
+      state = appendTurn(state, {
+        role: "candidate",
+        text: `turn ${index}`,
+        at: NOW,
+      });
     }
-    expect(s.recentTurns).toHaveLength(RECENT_TURNS_LIMIT);
-    expect(s.recentTurns[0]?.text).toBe(`turn ${total - RECENT_TURNS_LIMIT + 1}`);
-    expect(s.recentTurns.at(-1)?.text).toBe(`turn ${total}`);
-    expect(s.stats.turns).toBe(total); // count is cumulative, not buffer length
+
+    expect(state.recentTurns).toHaveLength(RECENT_TURNS_LIMIT);
+    expect(state.recentTurns[0]?.text).toBe(`turn ${total - RECENT_TURNS_LIMIT + 1}`);
+    expect(state.stats.turns).toBe(total);
   });
 });

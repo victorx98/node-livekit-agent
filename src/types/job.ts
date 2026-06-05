@@ -9,6 +9,7 @@ export interface InterviewQuestion {
   purpose_and_focus?: string;
   sub_points?: string[];
   category?: string;
+  [key: string]: unknown;
 }
 
 export interface InterviewStudentInfo {
@@ -49,6 +50,7 @@ export interface AgentMetadata {
   participantId: string;
   participantInfo: ParticipantInfo;
   systemInstruction: string;
+  greetingPrompt?: string;
   recordingKey: string;
   options: {
     autoStart: boolean;

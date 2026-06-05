@@ -15,18 +15,7 @@ export interface InterviewState {
   jobId: string;
   interviewId: string;
 
-  currentQuestionIndex: number;
-  askedQuestionIds: number[]; // indices already covered
-  unansweredTopics: number[]; // planned questions not yet covered
-
-  // Deterministic only (e.g. keyword tags) — NOT a model summary in MVP.
-  notes: string[];
-
   recentTurns: InterviewTurn[]; // ring buffer, last RECENT_TURNS_LIMIT
-
-  providerResume?: {
-    openaiSessionId?: string;
-  };
 
   stats: {
     turns: number;
@@ -41,16 +30,11 @@ export const RECENT_TURNS_LIMIT = 12;
 export function createInitialState(args: {
   jobId: string;
   interviewId: string;
-  questionCount: number;
   now: string;
 }): InterviewState {
   return {
     jobId: args.jobId,
     interviewId: args.interviewId,
-    currentQuestionIndex: 0,
-    askedQuestionIds: [],
-    unansweredTopics: Array.from({ length: args.questionCount }, (_, i) => i),
-    notes: [],
     recentTurns: [],
     stats: {
       turns: 0,

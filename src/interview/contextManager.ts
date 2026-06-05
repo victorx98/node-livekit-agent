@@ -25,7 +25,7 @@ export interface MinimalLogger {
 
 export interface ContextManagerDeps {
   /** Build the seed for an attempt; `isReseed` is true for every retry. */
-  buildSeed: (isReseed: boolean) => ReseedSeed;
+  buildSeed: (isReseed: boolean) => Promise<ReseedSeed>;
   /** Create a fresh session for the given seed. */
   createSession: (seed: ReseedSeed) => Promise<ManagedSession>;
   /** Side effect run before each reconnect attempt (persist reconnect count, etc.). */
@@ -65,7 +65,7 @@ export class ContextManager {
         );
       }
 
-      const seed = buildSeed(isReseed);
+      const seed = await buildSeed(isReseed);
       const session = await createSession(seed);
 
       let outcome: SessionOutcome;

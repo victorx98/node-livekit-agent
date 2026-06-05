@@ -1,70 +1,90 @@
-import { describe, it, expect } from "vitest";
-import { buildReseedContext } from "./reseed.js";
-import { resolveJobConfig } from "../config/resolveConfig.js";
-import { sampleAgentMetadata } from "../config/sampleMetadata.js";
-import { createInitialState, appendTurn, type InterviewState } from "./interviewState.js";
-import type { AgentMetadata } from "../types/job.js";
+import { describe, expect, it } from "vitest";
+import {
+  buildRecoveryChatContext,
+  buildSessionSeed,
+  selectRecoveryTurns,
+  type RecoveryTranscriptTurn,
+} from "./reseed.js";
 
 const NOW = "2026-06-01T10:00:00.000Z";
+const limits = { maxTurns: 24, maxChars: 24_000 };
 
-function cfgFrom(mutate?: (m: AgentMetadata) => void) {
-  const m = sampleAgentMetadata();
-  mutate?.(m);
-  return resolveJobConfig(JSON.stringify(m), "job_x");
-}
-
-function stateWith(overrides: Partial<InterviewState>): InterviewState {
+function turn(
+  role: RecoveryTranscriptTurn["role"],
+  text: string,
+  offsetSeconds = 0,
+): RecoveryTranscriptTurn {
   return {
-    ...createInitialState({ jobId: "job_x", interviewId: "int_789", questionCount: 2, now: NOW }),
-    ...overrides,
+    role,
+    text,
+    at: new Date(Date.parse(NOW) + offsetSeconds * 1000).toISOString(),
   };
 }
 
-describe("buildReseedContext (§12 reseed / §13)", () => {
-  it("returns the full instructions and no recap on the first attempt", () => {
-    const seed = buildReseedContext(cfgFrom(), stateWith({}), false);
-    expect(seed.instructions).toContain("You are an AI interviewer");
-    expect(seed.recap).toBeUndefined();
+function messages(chatCtx: ReturnType<typeof buildRecoveryChatContext>) {
+  return chatCtx.items
+    .filter((item) => item.type === "message")
+    .map((item) => ({ role: item.role, text: item.textContent }));
+}
+
+describe("fresh-session recovery context", () => {
+  it("uses the API instruction unchanged and no chat context on first startup", () => {
+    const instruction = "\n  exact API instruction  \n";
+    const seed = buildSessionSeed(instruction, [turn("candidate", "ignored")], false, limits);
+
+    expect(seed.instructions).toBe(instruction);
+    expect(seed.recovered).toBe(false);
+    expect(seed.chatCtx).toBeUndefined();
   });
 
-  it("returns the full instructions plus a recap on reseed", () => {
-    const seed = buildReseedContext(cfgFrom(), stateWith({}), true);
-    expect(seed.instructions).toContain("You are an AI interviewer");
-    expect(seed.recap).toBeDefined();
-    // It must tell the model to continue, not restart.
-    expect(seed.recap?.toLowerCase()).toContain("resuming");
-    expect(seed.recap?.toLowerCase()).toMatch(/do not (restart|re-introduce|reintroduce)/);
+  it("restores candidate and interviewer turns with correct LiveKit roles", () => {
+    const transcript = [
+      turn("interviewer", "First question", 1),
+      turn("candidate", "First answer", 2),
+      turn("system", "internal event", 3),
+      turn("interviewer", "Follow-up", 4),
+    ];
+    const seed = buildSessionSeed("API INSTRUCTION", transcript, true, limits);
+
+    expect(seed.instructions).toBe("API INSTRUCTION");
+    expect(seed.recovered).toBe(true);
+    expect(messages(seed.chatCtx!)).toEqual([
+      { role: "assistant", text: "First question" },
+      { role: "user", text: "First answer" },
+      { role: "assistant", text: "Follow-up" },
+    ]);
   });
 
-  it("names covered and still-to-cover questions by text in the recap", () => {
-    const state = stateWith({
-      currentQuestionIndex: 1,
-      askedQuestionIds: [0],
-      unansweredTopics: [1],
-    });
-    const recap = buildReseedContext(cfgFrom(), state, true).recap ?? "";
-    expect(recap).toContain("Tell me about your backend experience.");
-    expect(recap).toContain("How would you debug a production latency issue?");
-    expect(recap).toContain("1"); // current question index
+  it("keeps the newest turns within the turn limit and preserves chronology", () => {
+    const transcript = [
+      turn("candidate", "one", 1),
+      turn("interviewer", "two", 2),
+      turn("candidate", "three", 3),
+      turn("interviewer", "four", 4),
+    ];
+
+    expect(selectRecoveryTurns(transcript, { maxTurns: 2, maxChars: 100 })).toEqual([
+      transcript[2],
+      transcript[3],
+    ]);
   });
 
-  it("includes recent turns in the recap", () => {
-    let state = stateWith({});
-    state = appendTurn(state, {
-      role: "interviewer",
-      text: "Tell me about your experience.",
-      at: NOW,
-    });
-    state = appendTurn(state, { role: "candidate", text: "I built a payments service.", at: NOW });
-    const recap = buildReseedContext(cfgFrom(), state, true).recap ?? "";
-    expect(recap).toContain("I built a payments service.");
-    expect(recap.toLowerCase()).toContain("candidate");
+  it("keeps restored text within the character limit", () => {
+    const selected = selectRecoveryTurns(
+      [turn("candidate", "older"), turn("interviewer", "1234567890")],
+      { maxTurns: 10, maxChars: 6 },
+    );
+
+    expect(selected).toEqual([turn("interviewer", "123456")]);
+    expect(selected.reduce((sum, item) => sum + item.text.length, 0)).toBe(6);
   });
 
-  it("is safe when there is no covered or pending progress yet", () => {
-    const state = stateWith({ askedQuestionIds: [], unansweredTopics: [], recentTurns: [] });
-    const recap = buildReseedContext(cfgFrom(), state, true).recap ?? "";
-    expect(recap.length).toBeGreaterThan(0);
-    expect(recap.toLowerCase()).toContain("resuming");
+  it("does not insert the system instruction or reconstructed questions into chat history", () => {
+    const chatCtx = buildRecoveryChatContext([turn("candidate", "My actual answer")], limits);
+    const serialized = JSON.stringify(messages(chatCtx));
+
+    expect(serialized).toContain("My actual answer");
+    expect(serialized).not.toContain("API INSTRUCTION");
+    expect(serialized).not.toContain("question_text");
   });
 });

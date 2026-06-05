@@ -1,6 +1,7 @@
 import type { Redis } from "ioredis";
 import type { InterviewState } from "../interview/interviewState.js";
 import type { TranscriptEvent } from "../interview/transcriptStore.js";
+import type { InterviewRecoverySnapshot } from "../types/config.js";
 import type { JobRecord } from "../types/tracker.js";
 
 // The single durable backend (§14). RedisStore is the ONLY module that issues
@@ -11,6 +12,7 @@ import type { JobRecord } from "../types/tracker.js";
 const DEFAULT_FINALIZE_TTL_SECONDS = 24 * 60 * 60;
 
 const stateKey = (jobId: string): string => `iv:${jobId}:state`;
+const recoveryKey = (jobId: string): string => `iv:${jobId}:recovery`;
 const transcriptKey = (jobId: string): string => `iv:${jobId}:transcript`;
 const jobKey = (jobId: string): string => `job:${jobId}`;
 const JOBS_INDEX = "jobs";
@@ -27,6 +29,17 @@ export class RedisStore {
   async getInterviewState(jobId: string): Promise<InterviewState | undefined> {
     const raw = await this.redis.get(stateKey(jobId));
     return raw ? (JSON.parse(raw) as InterviewState) : undefined;
+  }
+
+  // --- API-authored recovery snapshot ---
+
+  async saveRecoverySnapshot(jobId: string, snapshot: InterviewRecoverySnapshot): Promise<void> {
+    await this.redis.set(recoveryKey(jobId), JSON.stringify(snapshot));
+  }
+
+  async getRecoverySnapshot(jobId: string): Promise<InterviewRecoverySnapshot | undefined> {
+    const raw = await this.redis.get(recoveryKey(jobId));
+    return raw ? (JSON.parse(raw) as InterviewRecoverySnapshot) : undefined;
   }
 
   // --- transcript (append-only) ---
@@ -82,6 +95,7 @@ export class RedisStore {
   async finalize(jobId: string, ttlSeconds: number = DEFAULT_FINALIZE_TTL_SECONDS): Promise<void> {
     await Promise.all([
       this.redis.expire(stateKey(jobId), ttlSeconds),
+      this.redis.expire(recoveryKey(jobId), ttlSeconds),
       this.redis.expire(transcriptKey(jobId), ttlSeconds),
       this.redis.expire(jobKey(jobId), ttlSeconds),
     ]);

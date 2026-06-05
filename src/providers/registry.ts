@@ -1,7 +1,12 @@
 import type { llm } from "@livekit/agents";
 import { googleProvider } from "./google.js";
 import { openaiProvider } from "./openai.js";
-import type { RealtimeProvider, CreateRealtimeModelArgs, ProviderRuntimeArgs } from "./types.js";
+import type {
+  CreateRealtimeModelArgs,
+  ProviderRuntimeArgs,
+  RealtimeProvider,
+  RealtimeProviderCapabilities,
+} from "./types.js";
 import type { ModelProvider } from "../types/config.js";
 
 export type RealtimeProviderRegistry = Map<ModelProvider, RealtimeProvider>;
@@ -27,6 +32,13 @@ export function assertProviderAllowed(
   registry: RealtimeProviderRegistry = defaultRealtimeProviderRegistry,
 ): void {
   getRealtimeProvider(args.cfg.model_provider, registry).assertConfig(args);
+}
+
+export function getRealtimeProviderCapabilities(
+  args: ProviderRuntimeArgs,
+  registry: RealtimeProviderRegistry = defaultRealtimeProviderRegistry,
+): RealtimeProviderCapabilities {
+  return getRealtimeProvider(args.cfg.model_provider, registry).capabilities(args);
 }
 
 export function createRealtimeModel(

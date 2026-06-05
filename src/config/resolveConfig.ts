@@ -1,5 +1,10 @@
 import { AgentMetadataSchema } from "./schema.js";
-import type { ResolvedJobConfig, ModelProvider } from "../types/config.js";
+import type {
+  InterviewRecoverySnapshot,
+  ModelProvider,
+  ResolvedJobConfig,
+} from "../types/config.js";
+import type { InterviewQuestion } from "../types/job.js";
 
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
 export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
@@ -38,6 +43,13 @@ function parseMetadata(rawMetadata: unknown): Record<string, unknown> {
 function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
     if (typeof value === "string" && value.trim() !== "") return value.trim();
+  }
+  return undefined;
+}
+
+function firstNonBlankStringPreservingValue(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim() !== "") return value;
   }
   return undefined;
 }
@@ -103,18 +115,13 @@ function normalizeQuestions(rawQuestions: unknown): unknown[] {
   );
 }
 
-function titleFor(position: string, company: string, interviewType: string): string {
-  if (position) return `${position}${company ? " @ " + company : ""} (${interviewType})`;
-  if (company) return `${company} (${interviewType})`;
-  return interviewType;
-}
-
 function normalizeMetadata(rawMetadata: unknown): Record<string, unknown> {
   const top = parseMetadata(rawMetadata);
   const interviewData = parseInterviewData(top.interviewData ?? top.interview_data);
 
   const rawProvider =
-    firstString(interviewData.model_provider, interviewData.modelProvider, top.provider) ?? "google";
+    firstString(interviewData.model_provider, interviewData.modelProvider, top.provider) ??
+    "google";
   const modelProvider = normalizeProvider(rawProvider);
   // Gemini: the model id is hardcoded server-side (GEMINI_MODEL env, else
   // DEFAULT_GEMINI_MODEL). We intentionally ignore any model_name in the
@@ -124,31 +131,35 @@ function normalizeMetadata(rawMetadata: unknown): Record<string, unknown> {
   const modelName =
     modelProvider === "google"
       ? defaultModelForProvider(modelProvider)
-      : firstString(
+      : (firstString(
           interviewData.model_name,
           interviewData.modelName,
           top.model_name,
           top.modelName,
-        ) ?? defaultModelForProvider(modelProvider);
+        ) ?? defaultModelForProvider(modelProvider));
 
   const participantInfoInput = recordOrEmpty(top.participantInfo ?? top.participant_info);
   const participantInput = recordOrEmpty(interviewData.participant);
   const studentInput = recordOrEmpty(interviewData.student);
   const participantName =
-    firstString(participantInfoInput.name, participantInput.name, studentInput.name) ?? "Participant";
+    firstString(participantInfoInput.name, participantInput.name, studentInput.name) ??
+    "Participant";
   const participantEmail = nullableString(
     participantInfoInput.email ?? participantInput.email ?? studentInput.email,
   );
   const participantInfo = { name: participantName, email: participantEmail };
   const studentName = hasOwn(studentInput, "name")
-    ? (typeof studentInput.name === "string" ? studentInput.name.trim() : "")
+    ? typeof studentInput.name === "string"
+      ? studentInput.name.trim()
+      : ""
     : participantName;
   const studentEmail = hasOwn(studentInput, "email")
     ? nullableString(studentInput.email)
     : participantEmail;
 
   const studentId = nullableString(top.studentId ?? top.student_id);
-  const participantId = firstString(top.participantId, top.participant_id, studentId) ?? "participant";
+  const participantId =
+    firstString(top.participantId, top.participant_id, studentId) ?? "participant";
 
   const options = { ...recordOrEmpty(top.options) };
   const topLevelEnableRecording = booleanish(top.enableRecording ?? top.enable_recording);
@@ -162,12 +173,17 @@ function normalizeMetadata(rawMetadata: unknown): Record<string, unknown> {
     studentId,
     participantId,
     participantInfo,
-    systemInstruction: firstString(top.systemInstruction, top.system_instruction),
+    systemInstruction: firstNonBlankStringPreservingValue(
+      top.systemInstruction,
+      top.system_instruction,
+    ),
+    greetingPrompt: firstNonBlankStringPreservingValue(top.greetingPrompt, top.greeting_prompt),
     recordingKey: firstString(top.recordingKey, top.recording_key),
     options,
     interviewData: {
       ...interviewData,
-      position: firstString(interviewData.position, interviewData.job_title, interviewData.jobTitle) ?? "",
+      position:
+        firstString(interviewData.position, interviewData.job_title, interviewData.jobTitle) ?? "",
       interview_type: firstString(interviewData.interview_type, interviewData.interviewType),
       company: firstString(interviewData.company),
       language: firstString(interviewData.language),
@@ -183,7 +199,7 @@ function normalizeMetadata(rawMetadata: unknown): Record<string, unknown> {
       interview_questions: normalizeQuestions(
         interviewData.interview_questions ?? interviewData.questions,
       ),
-      systemInstruction: firstString(
+      systemInstruction: firstNonBlankStringPreservingValue(
         interviewData.systemInstruction,
         interviewData.system_instruction,
       ),
@@ -202,10 +218,67 @@ function normalizeMetadata(rawMetadata: unknown): Record<string, unknown> {
   };
 }
 
+function freezeQuestion(question: InterviewQuestion): Readonly<InterviewQuestion> {
+  const copy: InterviewQuestion = {
+    ...question,
+    ...(question.sub_points ? { sub_points: [...question.sub_points] } : {}),
+  };
+  if (copy.sub_points) Object.freeze(copy.sub_points);
+  return Object.freeze(copy);
+}
+
+function buildRecoverySnapshot(args: {
+  systemInstruction: string;
+  interviewData: {
+    interview_questions: InterviewQuestion[];
+    language: string;
+    interview_type: string;
+    position: string;
+    company: string;
+    durationMins: number;
+    student: {
+      name: string;
+      background?: string;
+      experience_level?: string;
+    };
+  };
+}): InterviewRecoverySnapshot {
+  const questions = Object.freeze(args.interviewData.interview_questions.map(freezeQuestion));
+  const candidate = Object.freeze({
+    name: args.interviewData.student.name,
+    ...(args.interviewData.student.background
+      ? { background: args.interviewData.student.background }
+      : {}),
+    ...(args.interviewData.student.experience_level
+      ? { experience_level: args.interviewData.student.experience_level }
+      : {}),
+  });
+
+  return Object.freeze({
+    system_instruction: args.systemInstruction,
+    questions,
+    language: args.interviewData.language,
+    interview_type: args.interviewData.interview_type,
+    position: args.interviewData.position,
+    company: args.interviewData.company,
+    duration_minutes: args.interviewData.durationMins,
+    candidate,
+  });
+}
+
 export function resolveJobConfig(rawMetadata: unknown, jobId: string): ResolvedJobConfig {
   const m = AgentMetadataSchema.parse(normalizeMetadata(rawMetadata));
   const d = m.interviewData;
   const env = process.env;
+  const systemInstruction = firstNonBlankStringPreservingValue(
+    m.systemInstruction,
+    d.systemInstruction,
+  );
+  if (systemInstruction === undefined) {
+    throw new Error(
+      "Agent metadata must include a non-empty systemInstruction at the top level or in interviewData.",
+    );
+  }
 
   return {
     job_id: jobId,
@@ -216,20 +289,15 @@ export function resolveJobConfig(rawMetadata: unknown, jobId: string): ResolvedJ
     model_provider: normalizeProvider(d.model_provider),
     model: d.model_name,
     voice: envStr(env.DEFAULT_VOICE), // not on the wire
-    language: d.language,
-
-    interview: {
-      title: titleFor(d.position, d.company, d.interview_type),
-      role: d.position,
-      type: d.interview_type,
-      company: d.company,
-      duration_minutes: d.durationMins,
-      // Prefer the top-level systemInstruction; fall back to the inner one.
-      system_prompt: m.systemInstruction || d.systemInstruction,
-      questions: d.interview_questions,
-      student: d.student,
-      participant: d.participant ?? m.participantInfo,
-    },
+    system_instruction: systemInstruction,
+    duration_minutes: d.durationMins,
+    greeting_prompt:
+      firstNonBlankStringPreservingValue(m.greetingPrompt) ??
+      "Please greet the candidate and begin the interview.",
+    recovery_snapshot: buildRecoverySnapshot({
+      systemInstruction,
+      interviewData: d,
+    }),
 
     realtime: {
       turn_detection:

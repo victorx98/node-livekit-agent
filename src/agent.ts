@@ -1,12 +1,18 @@
+import { createHash } from "node:crypto";
 import { defineAgent, voice, type JobContext, type JobProcess } from "@livekit/agents";
 import { RoomEvent } from "@livekit/rtc-node";
 import { resolveJobConfig } from "./config/resolveConfig.js";
 import { extractJobMetadata } from "./config/metadata.js";
 import { loadEnv } from "./config/env.js";
-import { assertProviderAllowed, createRealtimeModel } from "./providers/registry.js";
+import {
+  assertProviderAllowed,
+  createRealtimeModel,
+  getRealtimeProviderCapabilities,
+} from "./providers/registry.js";
 import { createInitialState, appendTurn, type InterviewState } from "./interview/interviewState.js";
 import { chatRoleToTranscriptRole } from "./interview/transcriptStore.js";
-import { buildReseedContext } from "./interview/reseed.js";
+import { buildSessionSeed, type RecoveryTranscriptTurn } from "./interview/reseed.js";
+import { loadRecoverySource } from "./interview/recoverySource.js";
 import {
   ContextManager,
   type ManagedSession,
@@ -41,6 +47,7 @@ export default defineAgent({
     const cfg = resolveJobConfig(extractedMetadata.metadata, ctx.job?.id ?? ctx.room.name);
     const env = loadEnv();
     assertProviderAllowed({ cfg, env });
+    const providerCapabilities = getRealtimeProviderCapabilities({ cfg, env });
 
     // Per-process metrics (§20); started once per child and reused across jobs.
     const metrics = await getChildMetrics(env.serviceName, env.otelExporterOtlpEndpoint);
@@ -56,6 +63,17 @@ export default defineAgent({
       room: roomName,
       metadata_source: extractedMetadata.source,
     });
+    log.info(
+      {
+        event: "interview_instruction_resolved",
+        instruction_length: cfg.system_instruction.length,
+        instruction_sha256: createHash("sha256")
+          .update(cfg.system_instruction, "utf8")
+          .digest("hex"),
+        native_recovery: providerCapabilities.nativeRecovery,
+      },
+      "using API-authored interview instruction",
+    );
 
     const store = new RedisStore(getRedis());
     const tracker = new RedisJobTracker(store);
@@ -66,6 +84,7 @@ export default defineAgent({
       model: cfg.model,
       status: "starting",
     });
+    await store.saveRecoverySnapshot(cfg.job_id, cfg.recovery_snapshot);
     metrics.jobStarted(jobLabels);
 
     // Deterministic interview state shared across reconnects, write-through to
@@ -73,7 +92,6 @@ export default defineAgent({
     let state: InterviewState = createInitialState({
       jobId: cfg.job_id,
       interviewId: cfg.interview_id,
-      questionCount: cfg.interview.questions.length,
       now: new Date().toISOString(),
     });
     await store.saveInterviewState(state);
@@ -175,21 +193,25 @@ export default defineAgent({
 
       // One promise bounds the whole interview (room end or duration cap),
       // independent of how many realtime sessions are spun up by reconnects.
-      const interviewEnded = waitForRoomEndOrTimeout(ctx, cfg.interview.duration_minutes);
+      const interviewEnded = waitForRoomEndOrTimeout(ctx, cfg.duration_minutes);
 
       const createSession = async (seed: {
         instructions: string;
-        recap?: string;
+        chatCtx?: import("@livekit/agents").llm.ChatContext;
+        recovered: boolean;
       }): Promise<ManagedSession> => {
-        const isReseed = seed.recap !== undefined;
-        const instructions = isReseed ? `${seed.instructions}\n\n${seed.recap}` : seed.instructions;
+        const isReseed = seed.recovered;
+        const instructions = seed.instructions;
 
         const model = createRealtimeModel({
           cfg,
           env,
           instructions,
         });
-        const agent = new voice.Agent({ instructions });
+        const agent = new voice.Agent({
+          instructions,
+          ...(seed.chatCtx ? { chatCtx: seed.chatCtx } : {}),
+        });
         const session = new voice.AgentSession({
           llm: model,
           // Realtime models emit audio only after the candidate finishes
@@ -234,11 +256,22 @@ export default defineAgent({
             if (cfg.options.autoStart) {
               ctx
                 .waitForParticipant()
-                .then(() => {
+                .then(async () => {
+                  if (!providerCapabilities.supportsProgrammaticGreeting) {
+                    log.info(
+                      {
+                        event: "programmatic_greeting_skipped",
+                        model: cfg.model,
+                        reseed: isReseed,
+                      },
+                      "model does not support programmatic reply generation; waiting for candidate",
+                    );
+                    return;
+                  }
                   const opener = isReseed
                     ? "Continue the interview from where you left off; do not restart or re-introduce yourself."
-                    : "Greet the candidate briefly, then ask your first planned question.";
-                  session.generateReply({ instructions: opener });
+                    : cfg.greeting_prompt;
+                  await session.generateReply({ instructions: opener });
                 })
                 .catch((err: unknown) => log.warn({ err }, "no candidate joined to greet"));
             }
@@ -253,8 +286,43 @@ export default defineAgent({
         };
       };
 
+      const recoveryLimits = {
+        maxTurns: env.recoveryMaxTurns,
+        maxChars: env.recoveryMaxChars,
+      };
+      const recentTurnsFallback = (): RecoveryTranscriptTurn[] =>
+        state.recentTurns.map((turn) => ({
+          role: turn.role,
+          text: turn.text,
+          at: turn.at,
+        }));
+
       const ctxMgr = new ContextManager({
-        buildSeed: (isReseed) => buildReseedContext(cfg, state, isReseed),
+        buildSeed: async (isReseed) => {
+          if (!isReseed) {
+            return buildSessionSeed(cfg.system_instruction, [], false, recoveryLimits);
+          }
+
+          const recovery = await loadRecoverySource({
+            jobId: cfg.job_id,
+            reader: store,
+            fallbackSnapshot: cfg.recovery_snapshot,
+            fallbackTranscript: recentTurnsFallback(),
+          });
+          if (recovery.degraded) {
+            log.warn(
+              { event: "recovery_context_read_failed", err: recovery.error },
+              "using in-memory instruction snapshot and recent turns",
+            );
+          }
+
+          return buildSessionSeed(
+            recovery.snapshot.system_instruction,
+            recovery.transcript,
+            true,
+            recoveryLimits,
+          );
+        },
         createSession,
         onReconnect: async (attempt) => {
           enqueueWrite(async () => {

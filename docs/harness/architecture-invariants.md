@@ -22,9 +22,11 @@ import higher-level runtime modules. `providers`, `interview`, `recording`,
 - `src/config/schema.ts` validates the wire contract at the boundary.
 - Provider modules consume `ResolvedJobConfig`; they do not parse LiveKit job
   metadata directly.
-- Interview prompt and state-model modules are pure: no LiveKit, no Redis.
+- The API-authored `systemInstruction` is the only interview prompt. Runtime
+  code must not rebuild or augment it from structured interview metadata.
+- Interview state/recovery modules are pure: no Redis or room I/O.
   `interview/interviewState.ts`, `interview/transcriptStore.ts`, and
-  `interview/reseed.ts` define and reduce state; they must not perform I/O.
+  `interview/reseed.ts` define state and bounded transcript-to-chat restoration.
 - `interview/contextManager.ts` is the reconnect/reseed controller. It performs
   no I/O directly — it depends only on injected effects (a session factory, a
   reconnect callback, a logger) so the loop stays unit-testable with fault
@@ -55,8 +57,8 @@ import higher-level runtime modules. `providers`, `interview`, `recording`,
   `src/state/redisClient.ts` owns the lazy connection. Other modules depend on
   `RedisStore` methods, never on `ioredis` directly.
 - `src/agent.ts` owns LiveKit job orchestration and should delegate parsing,
-  prompt building, provider creation, state persistence, and job tracking to
-  smaller modules.
+  provider creation, recovery-context construction, state persistence, and job
+  tracking to smaller modules.
 - `src/main.ts` owns worker process startup and should not contain per-job
   interview behavior.
 - Operational modules must keep structured logs and secret redaction intact.

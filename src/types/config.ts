@@ -1,13 +1,27 @@
 // Internal resolved config (§8.2) — the adapter target.
 //
-// The rest of the service does NOT consume `AgentMetadata` directly. The config
-// resolver (../config/resolveConfig.ts) maps it once to `ResolvedJobConfig`, a
-// stable internal shape. This isolates every provider/feature module from
-// changes to the wire contract.
+// The API owns all interview intelligence. The worker preserves the selected
+// system instruction verbatim and only resolves the operational fields needed
+// to carry it out over realtime voice.
 
-import type { InterviewQuestion, InterviewStudentInfo, ParticipantInfo } from "./job.js";
+import type { InterviewQuestion } from "./job.js";
 
 export type ModelProvider = "openai" | "google";
+
+export interface InterviewRecoverySnapshot {
+  readonly system_instruction: string;
+  readonly questions: readonly Readonly<InterviewQuestion>[];
+  readonly language: string;
+  readonly interview_type: string;
+  readonly position: string;
+  readonly company: string;
+  readonly duration_minutes: number;
+  readonly candidate: Readonly<{
+    name: string;
+    background?: string;
+    experience_level?: string;
+  }>;
+}
 
 export interface ResolvedJobConfig {
   // identity
@@ -20,20 +34,12 @@ export interface ResolvedJobConfig {
   model_provider: ModelProvider; // normalized from interviewData.model_provider
   model: string; // interviewData.model_name
   voice?: string; // env/default; not on the wire
-  language: string; // interviewData.language
 
-  // interview content
-  interview: {
-    title: string; // derived from position/company/interview_type
-    role: string; // interviewData.position when present; empty for role-less interviews
-    type: string; // interviewData.interview_type
-    company: string; // interviewData.company
-    duration_minutes: number; // interviewData.durationMins
-    system_prompt: string; // top-level systemInstruction (fallback inner)
-    questions: InterviewQuestion[]; // interviewData.interview_questions
-    student: InterviewStudentInfo; // for context/personalization
-    participant: ParticipantInfo;
-  };
+  // API-authored interview execution
+  system_instruction: string;
+  duration_minutes: number;
+  greeting_prompt: string;
+  recovery_snapshot: InterviewRecoverySnapshot;
 
   // realtime tuning — not on the wire; from env/defaults
   realtime: {

@@ -56,6 +56,15 @@ export function buildGeminiContextWindowCompression(
 export const googleProvider: RealtimeProvider = {
   id: "google",
 
+  capabilities({ cfg }) {
+    return {
+      nativeRecovery: "session_resumption",
+      // The installed LiveKit Google plugin disables mid-session chat-context
+      // updates for 3.1 models, which also blocks generateReply().
+      supportsProgrammaticGreeting: !cfg.model.includes("3.1"),
+    };
+  },
+
   assertConfig({ env }) {
     if (!env.googleApiKey && !hasVertexAuth(env)) {
       throw new Error(
@@ -66,16 +75,10 @@ export const googleProvider: RealtimeProvider = {
   },
 
   createModel({ cfg, env, instructions }) {
-    // Native-audio models auto-detect the spoken language and reject an
-    // explicit languageCode ("Unsupported language code 'en' for model ...").
-    // Only the half-cascade models accept it, so omit it for native audio.
-    const isNativeAudio = cfg.model.includes("native-audio");
-
     return new google.realtime.RealtimeModel({
       model: cfg.model,
       apiKey: env.googleApiKey,
       voice: env.googleRealtimeVoice,
-      language: isNativeAudio ? undefined : cfg.language,
       realtimeInputConfig: buildGeminiRealtimeInputConfig(cfg.realtime),
       instructions,
       vertexai: env.googleGenaiUseVertexai,

@@ -19,9 +19,14 @@ const interviewId = "smoke_int_1";
 const room = "smoke-room";
 const now = new Date().toISOString();
 
-await tracker.create(jobId, { room, provider: "openai", model: "gpt-realtime", status: "starting" });
+await tracker.create(jobId, {
+  room,
+  provider: "openai",
+  model: "gpt-realtime",
+  status: "starting",
+});
 
-let state = createInitialState({ jobId, interviewId, questionCount: 3, now });
+let state = createInitialState({ jobId, interviewId, now });
 await store.saveInterviewState(state);
 
 const turns = [
@@ -36,7 +41,11 @@ for (const [role, text] of turns) {
   await store.appendTranscript({ jobId, interviewId, room, role, text, at });
   state = appendTurn(state, { role, text, at });
   await store.saveInterviewState(state);
-  await tracker.update(jobId, { status: "in_progress", turns: state.stats.turns, lastActivityAt: at });
+  await tracker.update(jobId, {
+    status: "in_progress",
+    turns: state.stats.turns,
+    lastActivityAt: at,
+  });
 }
 
 const persistedState = await store.getInterviewState(jobId);
@@ -46,7 +55,13 @@ const job = await tracker.get(jobId);
 console.log("\n=== Job record ===");
 console.log(JSON.stringify(job, null, 2));
 console.log("\n=== InterviewState (turns:", persistedState.stats.turns, ") ===");
-console.log(JSON.stringify({ ...persistedState, recentTurns: persistedState.recentTurns.length + " turns" }, null, 2));
+console.log(
+  JSON.stringify(
+    { ...persistedState, recentTurns: persistedState.recentTurns.length + " turns" },
+    null,
+    2,
+  ),
+);
 console.log("\n=== Transcript (", transcript.length, "events) ===");
 for (const e of transcript) console.log(`  #${e.sequence} ${e.role}: ${e.text}`);
 

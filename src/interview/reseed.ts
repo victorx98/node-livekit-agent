@@ -1,55 +1,80 @@
-import type { ResolvedJobConfig } from "../types/config.js";
-import type { InterviewState } from "./interviewState.js";
-import { buildInterviewInstructions } from "./buildInstructions.js";
+import { llm } from "@livekit/agents";
+import type { TranscriptRole } from "./transcriptStore.js";
 
-// Reseed context (§12 reseed note, §13). On a fresh start the seed is just the
-// full instruction block. On reconnect we additionally supply a recap built from
-// deterministic state — covered/pending questions and recent turns — so a brand
-// new realtime session can continue coherently instead of restarting. Pure: no
-// Redis, no LiveKit.
+// A provider plugin owns recoverable socket/session reconnects. This module is
+// only used after a fatal close requires a brand-new AgentSession. It restores
+// actual conversation turns without rewriting the API-authored instruction.
 
 export interface ReseedSeed {
   instructions: string;
-  recap?: string;
+  chatCtx?: llm.ChatContext;
+  recovered: boolean;
 }
 
-function questionText(cfg: ResolvedJobConfig, index: number): string | undefined {
-  return cfg.interview.questions[index]?.question_text;
+export interface RecoveryContextLimits {
+  maxTurns: number;
+  maxChars: number;
 }
 
-function listQuestions(cfg: ResolvedJobConfig, indices: number[]): string {
-  const texts = indices
-    .map((i) => questionText(cfg, i))
-    .filter((t): t is string => t !== undefined);
-  return texts.length ? texts.map((t) => `  - ${t}`).join("\n") : "  (none)";
+export interface RecoveryTranscriptTurn {
+  role: TranscriptRole;
+  text: string;
+  at: string;
 }
 
-function buildRecap(cfg: ResolvedJobConfig, state: InterviewState): string {
-  const recentTurns = state.recentTurns.length
-    ? state.recentTurns.map((t) => `  ${t.role}: ${t.text}`).join("\n")
-    : "  (no turns captured yet)";
+export function selectRecoveryTurns(
+  transcript: readonly RecoveryTranscriptTurn[],
+  limits: RecoveryContextLimits,
+): RecoveryTranscriptTurn[] {
+  const selected: RecoveryTranscriptTurn[] = [];
+  let usedChars = 0;
 
-  return [
-    "This interview is resuming after a connection interruption.",
-    "Continue naturally from where you left off. Do not restart the interview or re-introduce yourself.",
-    "",
-    `Current question index: ${state.currentQuestionIndex}`,
-    "Questions already covered:",
-    listQuestions(cfg, state.askedQuestionIds),
-    "Still to cover:",
-    listQuestions(cfg, state.unansweredTopics),
-    "",
-    "Recent conversation (most recent last):",
-    recentTurns,
-  ].join("\n");
+  for (let index = transcript.length - 1; index >= 0; index -= 1) {
+    if (selected.length >= limits.maxTurns || usedChars >= limits.maxChars) break;
+
+    const turn = transcript[index];
+    if (!turn || (turn.role !== "candidate" && turn.role !== "interviewer") || !turn.text) {
+      continue;
+    }
+
+    const remainingChars = limits.maxChars - usedChars;
+    const text = turn.text.length > remainingChars ? turn.text.slice(0, remainingChars) : turn.text;
+    if (!text) break;
+
+    selected.push({ role: turn.role, text, at: turn.at });
+    usedChars += text.length;
+    if (text.length < turn.text.length) break;
+  }
+
+  return selected.reverse();
 }
 
-export function buildReseedContext(
-  cfg: ResolvedJobConfig,
-  state: InterviewState,
-  isReseed: boolean,
+export function buildRecoveryChatContext(
+  transcript: readonly RecoveryTranscriptTurn[],
+  limits: RecoveryContextLimits,
+): llm.ChatContext {
+  const chatCtx = llm.ChatContext.empty();
+  for (const turn of selectRecoveryTurns(transcript, limits)) {
+    const createdAt = Date.parse(turn.at);
+    chatCtx.addMessage({
+      role: turn.role === "candidate" ? "user" : "assistant",
+      content: turn.text,
+      ...(Number.isFinite(createdAt) ? { createdAt } : {}),
+    });
+  }
+  return chatCtx;
+}
+
+export function buildSessionSeed(
+  instructions: string,
+  transcript: readonly RecoveryTranscriptTurn[],
+  isRecovery: boolean,
+  limits: RecoveryContextLimits,
 ): ReseedSeed {
-  const instructions = buildInterviewInstructions(cfg);
-  if (!isReseed) return { instructions };
-  return { instructions, recap: buildRecap(cfg, state) };
+  if (!isRecovery) return { instructions, recovered: false };
+  return {
+    instructions,
+    chatCtx: buildRecoveryChatContext(transcript, limits),
+    recovered: true,
+  };
 }

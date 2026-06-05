@@ -17,6 +17,8 @@ describe("loadEnv", () => {
       WEBHOOK_RETRY_BASE_MS: "2000",
       RECORDING_REQUIRED: "true",
       RECONNECT_MAX_RETRIES: "4",
+      RECOVERY_MAX_TURNS: "30",
+      RECOVERY_MAX_CHARS: "30000",
       MONITORING_PORT: "9090",
       MONITORING_HOST: "127.0.0.1",
     });
@@ -34,6 +36,8 @@ describe("loadEnv", () => {
     expect(env.webhookRetryBaseMs).toBe(2000);
     expect(env.recordingRequired).toBe(true);
     expect(env.reconnectMaxRetries).toBe(4);
+    expect(env.recoveryMaxTurns).toBe(30);
+    expect(env.recoveryMaxChars).toBe(30000);
     expect(env.monitoringPort).toBe(9090);
     expect(env.monitoringHost).toBe("127.0.0.1");
   });
@@ -53,6 +57,8 @@ describe("loadEnv", () => {
     expect(env.webhookRetryBaseMs).toBe(1000);
     expect(env.recordingRequired).toBe(false);
     expect(env.reconnectMaxRetries).toBe(3);
+    expect(env.recoveryMaxTurns).toBe(24);
+    expect(env.recoveryMaxChars).toBe(24_000);
     expect(env.monitoringPort).toBe(8080);
     expect(env.monitoringHost).toBe("0.0.0.0");
     expect(env.googleGenaiUseVertexai).toBe(false);
@@ -101,8 +107,13 @@ describe("loadEnv", () => {
   });
 
   it("throws a descriptive error for an invalid Gemini compression trigger", () => {
-    expect(() =>
-      loadEnv({ GEMINI_CONTEXT_WINDOW_COMPRESSION_TRIGGER_TOKENS: "0" }),
-    ).toThrow(/GEMINI_CONTEXT_WINDOW_COMPRESSION_TRIGGER_TOKENS/);
+    expect(() => loadEnv({ GEMINI_CONTEXT_WINDOW_COMPRESSION_TRIGGER_TOKENS: "0" })).toThrow(
+      /GEMINI_CONTEXT_WINDOW_COMPRESSION_TRIGGER_TOKENS/,
+    );
+  });
+
+  it("rejects non-positive recovery context limits", () => {
+    expect(() => loadEnv({ RECOVERY_MAX_TURNS: "0" })).toThrow(/RECOVERY_MAX_TURNS/);
+    expect(() => loadEnv({ RECOVERY_MAX_CHARS: "-1" })).toThrow(/RECOVERY_MAX_CHARS/);
   });
 });

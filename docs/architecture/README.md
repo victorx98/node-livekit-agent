@@ -18,13 +18,14 @@ External backend
           -> `src/ops/monitoring/handlers.ts`)
   -> job entrypoint (`src/agent.ts`)  [child process; emits per-job metrics]
   -> config resolver (`src/config/resolveConfig.ts`)
-  -> prompt builder (`src/interview/buildInstructions.ts`)
+       -> validates and preserves API `systemInstruction` verbatim
+       -> creates a redacted durable recovery snapshot
   -> provider registry (`src/providers/registry.ts`)
   -> recording: S3 preflight + LiveKit Egress (`src/recording/recorder.ts`
        -> `src/recording/s3Preflight.ts` + `src/recording/egressGateway.ts`)
   -> reconnect controller (`src/interview/contextManager.ts`)
-       -> realtime voice session (rebuilt + reseeded on fatal failure from
-          `src/interview/reseed.ts` using durable state)
+       -> realtime voice session (rebuilt on fatal failure from the original
+          instruction + bounded transcript ChatContext)
        -> per turn: deterministic state (`src/interview/interviewState.ts`)
           + transcript write-through to Redis (`src/state/redisStore.ts`)
   -> Redis-backed job tracker (`src/ops/jobTracker.ts` -> `src/state/redisStore.ts`)
@@ -33,8 +34,8 @@ External backend
 
 Provider plugins may reconnect transient socket drops themselves. The
 ContextManager handles the fatal path: when `AgentSession` closes with
-`CloseReason.ERROR`, it opens a new session seeded with instructions + a recap
-from durable state, up to `RECONNECT_MAX_RETRIES`.
+`CloseReason.ERROR`, it opens a new session with the exact API instruction and
+a bounded transcript ChatContext, up to `RECONNECT_MAX_RETRIES`.
 
 ## Modules
 
@@ -44,13 +45,14 @@ from durable state, up to `RECONNECT_MAX_RETRIES`.
 - `src/config/schema.ts`: validates dispatch metadata with Zod.
 - `src/config/resolveConfig.ts`: adapts wire metadata to `ResolvedJobConfig`.
 - `src/config/sampleMetadata.ts`: test and manual-dispatch sample data.
-- `src/interview/buildInstructions.ts`: builds the autonomous interview seed.
 - `src/interview/interviewState.ts`: pure deterministic interview-state model
-  and reducers (recent-turns ring buffer, turn stats).
+  and reducers (recent-turns fallback buffer, turn stats).
 - `src/interview/transcriptStore.ts`: transcript event shape and chat-role
   mapping (pure).
-- `src/interview/reseed.ts`: pure builder for the reseed context (instructions +
-  recap of covered/pending questions and recent turns).
+- `src/interview/reseed.ts`: pure bounded transcript selection and LiveKit
+  ChatContext restoration for a brand-new session after fatal failure.
+- `src/interview/recoverySource.ts`: injected persisted-read policy with
+  in-memory snapshot/recent-turn fallback when Redis recovery reads fail.
 - `src/interview/contextManager.ts`: reconnect/reseed controller driven by
   injected effects (session factory, reconnect callback); includes a no-op
   rotation hook.
@@ -96,10 +98,12 @@ from durable state, up to `RECONNECT_MAX_RETRIES`.
   LiveKit Google plugin manages Gemini session resumption handles and GoAway
   reconnects.
 - Job state, interview state, and transcript are persisted to Redis
-  (write-through). `REDIS_URL` is required to run the worker.
+  (write-through), along with a redacted API interview recovery snapshot.
+  `REDIS_URL` is required to run the worker.
 - Reconnect/reseed is implemented: fatal session failures rebuild a fresh
-  session from the durable recap, up to `RECONNECT_MAX_RETRIES`. Proactive
-  rotation of a healthy session is deferred (no-op hook in the ContextManager).
+  session with the original API instruction and bounded durable transcript, up
+  to `RECONNECT_MAX_RETRIES`. Provider-native reconnect/resumption runs first.
+  Proactive rotation of a healthy session is deferred.
 - The duration cap (`min(durationMins, 59)`) bounds every run, and
   `assertProviderAllowed` performs provider auth checks before model startup.
 - Recording to S3 via LiveKit Egress is implemented, gated by

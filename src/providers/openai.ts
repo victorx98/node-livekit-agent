@@ -27,6 +27,13 @@ export function buildOpenAITurnDetection(rt: RealtimeTuning): TurnDetection {
 export const openaiProvider: RealtimeProvider = {
   id: "openai",
 
+  capabilities() {
+    return {
+      nativeRecovery: "chat_context_replay",
+      supportsProgrammaticGreeting: true,
+    };
+  },
+
   assertConfig({ env }) {
     if (!env.openaiApiKey) {
       throw new Error("OpenAI realtime requires OPENAI_API_KEY.");

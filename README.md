@@ -51,11 +51,12 @@ is on 8081). A production **K8s manifest** lives in `k8s/`.
   required-vs-degrade per `RECORDING_REQUIRED`) and one final-state webhook
   (`job_completed`/`job_failed`) with bounded retry.
 - **Phase 3** — reconnect + reseed via the ContextManager (transient drops
-  handled by the selected provider plugin; fatal closes reseeded from the durable Redis
-  recap, up to `RECONNECT_MAX_RETRIES`).
+  handled by the selected provider plugin; fatal closes restored from the
+  durable Redis transcript, up to `RECONNECT_MAX_RETRIES`).
 - **Phases 0–2** — LiveKit worker + agent, pluggable realtime provider
   registry (OpenAI and Google Gemini),
-  instruction builder, durable Redis state + transcript + Redis-backed job
+  API-authoritative instruction execution, durable Redis state + transcript +
+  redacted recovery snapshot + Redis-backed job
   tracker, the `AgentMetadata`→`ResolvedJobConfig` contract, env loading,
   redacting logger. Duration cap (`min(durationMins, 59)`) bounds every run,
   and provider auth checks fail fast before model startup.
@@ -98,8 +99,8 @@ Gemini).
    pnpm dispatch     # node --env-file=.env scripts/dispatch.mjs
    ```
 4. Open https://agents-playground.livekit.io/, connect **manually** with the
-   printed server URL + candidate token, and start talking. The agent greets you
-   and works through the dispatched questions.
+   printed server URL + candidate token, and start talking. The agent carries
+   out the complete API-authored `systemInstruction`.
 
 ### Inspect durable state (Phase 2 acceptance)
 
@@ -125,8 +126,8 @@ REDIS_URL=redis://localhost:6379 node scripts/redis-smoke.mjs
 
 The reconnect/reseed logic is proven by a **deliberate fault-injection unit
 test** that needs no credentials — a fake session factory fails N times, and the
-controller is asserted to reseed (recap carried), count reconnects, and give up
-after the cap:
+controller is asserted to request a recovered seed, count reconnects, and give
+up after the cap:
 
 ```bash
 pnpm test src/interview/contextManager.test.ts
@@ -136,8 +137,9 @@ Live: during an interview, force a disconnect. A transient socket drop may be
 recovered by the selected provider plugin. A *fatal* failure (plugin retries
 exhausted) makes `AgentSession` close with `CloseReason.ERROR`;
 the worker logs `provider_reconnect_started` / `provider_reconnect_completed`,
-opens a fresh session seeded with the recap, and the agent continues from where
-it left off. Tune `RECONNECT_MAX_RETRIES` to bound the attempts.
+opens a fresh session with the original API instruction and a bounded
+transcript ChatContext, and continues from where it left off. Tune
+`RECONNECT_MAX_RETRIES`, `RECOVERY_MAX_TURNS`, and `RECOVERY_MAX_CHARS`.
 
 ### Recording + final webhook (Phase 4 acceptance)
 
@@ -225,6 +227,13 @@ shape. The rest of the service consumes `ResolvedJobConfig` (§8.2).
 API and deployed Python-agent-compatible payloads, validates with zod, and maps
 per the §8.3 table.
 
+The backend is the sole owner of interview intelligence. The worker selects the
+top-level `systemInstruction`, falls back to
+`interviewData.systemInstruction`, preserves the selected string exactly, and
+fails before joining the room when neither is usable. Questions, language,
+role, company, and candidate context are never rebuilt into another prompt.
+They are retained only in a redacted recovery snapshot.
+
 In production the LiveKit worker first extracts metadata from the room/job
 context in Python-compatible order:
 
@@ -250,11 +259,19 @@ Python-compatible fallbacks:
 - Python-style `job_title` maps to `position`; role-less interviews such as
   success-story conversations may omit both and rely on `systemInstruction`.
 - Python-style `questions: string[]` maps to `{ question_text }[]`.
+- `greetingPrompt`/`greeting_prompt` controls the initial one-turn execution
+  trigger; it defaults to `Please greet the candidate and begin the interview.`
 - Top-level `enableRecording` drives recording when
   `options.enableRecording` is absent.
 - `RECORDING_S3_BUCKET` falls back to `S3_BUCKET`.
 
 The core resolver remains pure (metadata payload + job id in) so the contract is
 fast to unit-test and the LiveKit dependency stays out of the core.
+
+Recoverable provider reconnects are handled natively: OpenAI replays its chat
+context and Gemini uses session-resumption handles. After a fatal close, the
+worker creates a new session with the exact API instruction and the newest
+persisted candidate/interviewer turns, bounded by `RECOVERY_MAX_TURNS=24` and
+`RECOVERY_MAX_CHARS=24000`.
 
 Copy `.env.example` to `.env` and fill in values as subsystems are wired.

@@ -33,11 +33,11 @@ function makeManager(
   const reseedFlags: boolean[] = [];
   let i = 0;
 
-  const buildSeed = (isReseed: boolean): ReseedSeed => {
+  const buildSeed = async (isReseed: boolean): Promise<ReseedSeed> => {
     reseedFlags.push(isReseed);
     const seed: ReseedSeed = isReseed
-      ? { instructions: "INSTR", recap: "RECAP" }
-      : { instructions: "INSTR" };
+      ? { instructions: "INSTR", recovered: true }
+      : { instructions: "INSTR", recovered: false };
     seeds.push(seed);
     return seed;
   };
@@ -91,8 +91,8 @@ describe("ContextManager — reconnect + reseed loop", () => {
     expect(createSession).toHaveBeenCalledTimes(3);
     // attempt 0 is a fresh start; attempts 1 and 2 are reseeds.
     expect(reseedFlags).toEqual([false, true, true]);
-    expect(seeds[1]?.recap).toBe("RECAP");
-    expect(seeds[2]?.recap).toBe("RECAP");
+    expect(seeds[1]?.recovered).toBe(true);
+    expect(seeds[2]?.recovered).toBe(true);
     // onReconnect fires once per retry with the attempt number.
     expect(onReconnect.mock.calls.map((c) => c[0])).toEqual([1, 2]);
   });

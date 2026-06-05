@@ -32,8 +32,9 @@ Core code paths:
 - `src/agent.ts`: LiveKit job entrypoint + per-turn persistence orchestration.
 - `src/config/`: env and dispatch metadata validation.
 - `src/providers/`: realtime provider routing + Gemini gate.
-- `src/interview/`: prompt construction, pure state/transcript/reseed models, and
-  the reconnect/reseed ContextManager.
+- `src/interview/`: pure state/transcript recovery models and the
+  reconnect/reseed ContextManager. The API, not this worker, authors interview
+  prompts.
 - `src/recording/`: recording controller (required-vs-degrade policy) plus thin
   LiveKit Egress and S3-preflight adapters.
 - `src/state/`: Redis connection and the durable store (only Redis-touching code).
@@ -50,9 +51,12 @@ Core code paths:
 - Keep `AGENTS.md` as a map; add durable detail under `docs/`.
 - Treat `AgentMetadata` as the wire contract and `ResolvedJobConfig` as the
   downstream internal contract.
+- Treat the selected API `systemInstruction` as immutable interview
+  intelligence. Do not reconstruct it from questions, language, role, company,
+  or candidate metadata.
 - Validate external shapes at boundaries; do not let provider or runtime code
   guess wire data.
-- Keep LiveKit-specific code out of pure config and prompt-building modules.
+- Keep LiveKit-specific code out of pure config modules.
 - Fail fast with contextual messages; never silently swallow exceptions.
 - Preserve structured logging and secret redaction.
 
