@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { defineAgent, voice, type JobContext, type JobProcess } from "@livekit/agents";
-import { RoomEvent } from "@livekit/rtc-node";
 import { resolveJobConfig } from "./config/resolveConfig.js";
 import { extractJobMetadata } from "./config/metadata.js";
 import { loadEnv } from "./config/env.js";
@@ -13,6 +12,11 @@ import { createInitialState, appendTurn, type InterviewState } from "./interview
 import { chatRoleToTranscriptRole } from "./interview/transcriptStore.js";
 import { buildSessionSeed, type RecoveryTranscriptTurn } from "./interview/reseed.js";
 import { loadRecoverySource } from "./interview/recoverySource.js";
+import {
+  candidateIdentityFromParticipantId,
+  watchInterviewEnd,
+  type InterviewEndReason,
+} from "./interview/roomEndWatcher.js";
 import {
   ContextManager,
   type ManagedSession,
@@ -193,9 +197,20 @@ export default defineAgent({
       if (recording.status === "active") metrics.recordingStarted();
       else if (recording.status === "failed") metrics.recordingStartFailed();
 
+      const candidateIdentity = candidateIdentityFromParticipantId(cfg.participant_id);
+      let interviewEndReason: InterviewEndReason | undefined;
       // One promise bounds the whole interview (room end or duration cap),
       // independent of how many realtime sessions are spun up by reconnects.
-      const interviewEnded = waitForRoomEndOrTimeout(ctx, cfg.duration_minutes);
+      const interviewEnded = watchInterviewEnd({
+        room: ctx.room,
+        durationMinutes: cfg.duration_minutes,
+        candidateIdentity,
+        absenceGraceMs: env.participantAbsenceGraceMs,
+        log,
+      }).then((reason) => {
+        interviewEndReason = reason;
+        return reason;
+      });
 
       const createSession = async (seed: {
         instructions: string;
@@ -248,7 +263,14 @@ export default defineAgent({
 
         return {
           start: async () => {
-            await session.start({ agent, room: ctx.room });
+            await session.start({
+              agent,
+              room: ctx.room,
+              inputOptions: {
+                participantIdentity: candidateIdentity,
+                closeOnDisconnect: false,
+              },
+            });
             await tracker.update(cfg.job_id, {
               status: "in_progress",
               lastActivityAt: new Date().toISOString(),
@@ -340,7 +362,14 @@ export default defineAgent({
       });
 
       await ctxMgr.run();
-      log.info({ event: "interview_ended" }, "room ended or duration reached");
+      log.info(
+        {
+          event: "interview_ended",
+          end_reason: interviewEndReason?.kind ?? "session_closed",
+          interview_end_reason: interviewEndReason,
+        },
+        "room ended or duration reached",
+      );
 
       await writeChain; // drain pending turn writes before finalizing
       await tracker.update(cfg.job_id, {
@@ -428,28 +457,4 @@ function classifyFailure(message: string): string {
   if (m.includes("gemini")) return "provider_gated";
   if (m.includes("redis")) return "redis";
   return "error";
-}
-
-/**
- * Resolve when the interview should end: the room disconnects, the last remote
- * participant (the candidate) leaves, or the duration ceiling is reached. The
- * ceiling is capped below the provider hard limit. This bounds the whole
- * interview across any number of reconnect-driven sessions.
- */
-function waitForRoomEndOrTimeout(ctx: JobContext, durationMinutes: number): Promise<void> {
-  const maxMs = Math.min(durationMinutes, 59) * 60_000;
-  return new Promise<void>((resolve) => {
-    let settled = false;
-    const finish = (): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve();
-    };
-    const timer = setTimeout(finish, maxMs);
-    ctx.room.on(RoomEvent.Disconnected, finish);
-    ctx.room.on(RoomEvent.ParticipantDisconnected, () => {
-      if (ctx.room.remoteParticipants.size === 0) finish();
-    });
-  });
 }
