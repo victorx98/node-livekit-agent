@@ -17,6 +17,7 @@ describe("loadEnv", () => {
       WEBHOOK_RETRY_BASE_MS: "2000",
       RECORDING_REQUIRED: "true",
       RECONNECT_MAX_RETRIES: "4",
+      PARTICIPANT_ABSENCE_GRACE_MS: "20000",
       RECOVERY_MAX_TURNS: "30",
       RECOVERY_MAX_CHARS: "30000",
       MONITORING_PORT: "9090",
@@ -36,6 +37,7 @@ describe("loadEnv", () => {
     expect(env.webhookRetryBaseMs).toBe(2000);
     expect(env.recordingRequired).toBe(true);
     expect(env.reconnectMaxRetries).toBe(4);
+    expect(env.participantAbsenceGraceMs).toBe(20000);
     expect(env.recoveryMaxTurns).toBe(30);
     expect(env.recoveryMaxChars).toBe(30000);
     expect(env.monitoringPort).toBe(9090);
@@ -57,6 +59,7 @@ describe("loadEnv", () => {
     expect(env.webhookRetryBaseMs).toBe(1000);
     expect(env.recordingRequired).toBe(false);
     expect(env.reconnectMaxRetries).toBe(3);
+    expect(env.participantAbsenceGraceMs).toBe(15_000);
     expect(env.recoveryMaxTurns).toBe(24);
     expect(env.recoveryMaxChars).toBe(24_000);
     expect(env.monitoringPort).toBe(8080);
@@ -115,5 +118,14 @@ describe("loadEnv", () => {
   it("rejects non-positive recovery context limits", () => {
     expect(() => loadEnv({ RECOVERY_MAX_TURNS: "0" })).toThrow(/RECOVERY_MAX_TURNS/);
     expect(() => loadEnv({ RECOVERY_MAX_CHARS: "-1" })).toThrow(/RECOVERY_MAX_CHARS/);
+  });
+
+  it("rejects non-positive participant absence grace values", () => {
+    expect(() => loadEnv({ PARTICIPANT_ABSENCE_GRACE_MS: "0" })).toThrow(
+      /PARTICIPANT_ABSENCE_GRACE_MS/,
+    );
+    expect(() => loadEnv({ PARTICIPANT_ABSENCE_GRACE_MS: "-1" })).toThrow(
+      /PARTICIPANT_ABSENCE_GRACE_MS/,
+    );
   });
 });

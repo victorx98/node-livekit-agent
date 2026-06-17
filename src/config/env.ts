@@ -34,6 +34,7 @@ export interface Env {
 
   // reconnect/reseed (§13)
   reconnectMaxRetries: number;
+  participantAbsenceGraceMs: number;
   recoveryMaxTurns: number;
   recoveryMaxChars: number;
 
@@ -138,6 +139,7 @@ export function loadEnv(source: EnvSource = process.env): Env {
     webhookRetryBaseMs: intOr(source, "WEBHOOK_RETRY_BASE_MS", 1000),
 
     reconnectMaxRetries: intOr(source, "RECONNECT_MAX_RETRIES", 3),
+    participantAbsenceGraceMs: positiveIntOr(source, "PARTICIPANT_ABSENCE_GRACE_MS", 15_000),
     recoveryMaxTurns: positiveIntOr(source, "RECOVERY_MAX_TURNS", 24),
     recoveryMaxChars: positiveIntOr(source, "RECOVERY_MAX_CHARS", 24_000),
     forwardAudioIdleTimeoutMs: intOr(source, "FORWARD_AUDIO_IDLE_TIMEOUT_MS", 300_000),
