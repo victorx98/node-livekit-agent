@@ -15,13 +15,13 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
       '@livekit/agents':
-        specifier: ^1.4.11
+        specifier: 1.4.11
         version: 1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)
       '@livekit/agents-plugin-google':
         specifier: 1.4.11
         version: 1.4.11(@livekit/agents@1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(ws@8.21.0)(zod@3.25.76)
       '@livekit/agents-plugin-openai':
-        specifier: ^1.4.11
+        specifier: 1.4.11
         version: 1.4.11(@livekit/agents@1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(zod@3.25.76)
       '@livekit/rtc-node':
         specifier: ^0.13.29

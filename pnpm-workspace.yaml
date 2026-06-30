@@ -5,14 +5,15 @@ onlyBuiltDependencies:
   - protobufjs
   - sharp
   - "@ffmpeg-installer/linux-x64"
+  - "@livekit/local-inference"
 allowBuilds:
   esbuild: true
   protobufjs: true
   sharp: true
   "@ffmpeg-installer/linux-x64": true
-  '@google/genai': false
-  '@livekit/local-inference': true
+  "@livekit/local-inference": true
+  "@google/genai": false
 minimumReleaseAgeExclude:
-  - '@livekit/agents-plugin-google'
-  - '@livekit/agents-plugin-openai'
-  - '@livekit/agents'
+  - "@livekit/agents-plugin-google"
+  - "@livekit/agents-plugin-openai"
+  - "@livekit/agents"
