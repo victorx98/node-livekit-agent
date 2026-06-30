@@ -15,14 +15,14 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
       '@livekit/agents':
-        specifier: ^1.4.5
-        version: 1.4.5(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)
+        specifier: ^1.4.11
+        version: 1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)
       '@livekit/agents-plugin-google':
-        specifier: 1.4.5
-        version: 1.4.5(@livekit/agents@1.4.5(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(ws@8.21.0)(zod@3.25.76)
+        specifier: 1.4.11
+        version: 1.4.11(@livekit/agents@1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(ws@8.21.0)(zod@3.25.76)
       '@livekit/agents-plugin-openai':
-        specifier: ^1.4.5
-        version: 1.4.5(@livekit/agents@1.4.5(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(zod@3.25.76)
+        specifier: ^1.4.11
+        version: 1.4.11(@livekit/agents@1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(zod@3.25.76)
       '@livekit/rtc-node':
         specifier: ^0.13.29
         version: 0.13.29
@@ -637,31 +637,63 @@ packages:
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
 
-  '@livekit/agents-plugin-google@1.4.5':
-    resolution: {integrity: sha512-besIcmPqVdmnuCijo3zv6MM5uOK865kwtts1HE3HmqRMp7yztju+z2Vz7VM7IE8zWYRY8xPXwhWaAPODJMQ8vg==}
+  '@livekit/agents-plugin-google@1.4.11':
+    resolution: {integrity: sha512-WAFjFWhG85d2GwHWGuNRKufrpypsDzBm2JhbAffbjS5Dpf/Sw/G/8SwqeRz/GXaPC//lHNzfWQjJuhv5v8auBA==}
     peerDependencies:
-      '@livekit/agents': 1.4.5
+      '@livekit/agents': 1.4.11
       '@livekit/rtc-node': ^0.13.29
 
-  '@livekit/agents-plugin-openai@1.4.5':
-    resolution: {integrity: sha512-Condyt4s1lyWPPpJXia+EtzL7U5KPSLG+eSKCsqDlFRqUjZXEa7qvGo8qRqcWNKbHGFKmt+cNaT5d4o09wNl6g==}
+  '@livekit/agents-plugin-openai@1.4.11':
+    resolution: {integrity: sha512-oCSsst08uXPtolA+nS600KtvR67dGtwSBud5cH3bSZipU5xVsK6nnGDGsGuGvDILLp8+8dpXmHDvgRjapyKgsg==}
     peerDependencies:
-      '@livekit/agents': 1.4.5
+      '@livekit/agents': 1.4.11
       '@livekit/rtc-node': ^0.13.29
       zod: ^3.25.76 || ^4.1.8
 
-  '@livekit/agents@1.4.5':
-    resolution: {integrity: sha512-E/GgjPhv649ow+Le9xIOHnBrTFzXuDJgjlT2KxryJ80fOArz5cZe7CY5c3OnB11izzbKR9wqOzzjaYoM5nF92w==}
+  '@livekit/agents@1.4.11':
+    resolution: {integrity: sha512-gM1/+hJ3xPTV3rAVaR0PK4uNJyhh6Z4Ut5RB+RSAvEm3m8UkelCXWapf6AG8VOvGMhO3SxLlaDHb0GcwVYu7Lw==}
     hasBin: true
     peerDependencies:
       '@livekit/rtc-node': ^0.13.29
       zod: ^3.25.76 || ^4.1.8
+
+  '@livekit/local-inference-darwin-arm64@0.2.6':
+    resolution: {integrity: sha512-YdzE0eXgLpUfT0S6AcJ73BknX6fnHWqmH2AukNkO6IBmpth4dFnTvTpOrGWPunlbDJmXanCwdD+Bh9O4oQA+PQ==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@livekit/local-inference-darwin-x64@0.2.6':
+    resolution: {integrity: sha512-fSicCqoYA5iOtW2jZfB91RIcNafXs19xRNPH5QSHvrRXljvCn8WMh+7do1jEg1f2U98TDsyptZ91laiDSh8xNg==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@livekit/local-inference-linux-arm64-gnu@0.2.6':
+    resolution: {integrity: sha512-XvLWw8IwiIimoQjivxelRdSz9uSenR7UJiw1KDL35qJd3ZrI3QMORnyx63s7TFgNNCoyJ2CBFBqs9k9pPuqkTA==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@livekit/local-inference-linux-x64-gnu@0.2.6':
+    resolution: {integrity: sha512-L9MagQm/5tm0r82/GXecIZU8jz/2LY8DsMzRPlkz/2Et6qR4zz+8wEOUifuLC520L8MFN7HN6yf+PNbQnSfvWA==}
+    cpu: [x64]
+    os: [linux]
+
+  '@livekit/local-inference-win32-x64-msvc@0.2.6':
+    resolution: {integrity: sha512-g3B10sLdIsE0du8xh8+oFAllvbKZBRcVUXf52HvtRwNVQ3OiodrRI/Ehyvy9C94rwKDI40Kk5ZWcPo7cTI68IQ==}
+    cpu: [x64]
+    os: [win32]
+
+  '@livekit/local-inference@0.2.6':
+    resolution: {integrity: sha512-HtA5tC+gdDHoWAkb0QJYVCIoLL6/53VGXVoRY68zIeTUik9kAW/EOuYirEqRuGlL2UCzjWRRhRSkxLleLyucmQ==}
+    engines: {node: '>=18.0.0'}
 
   '@livekit/mutex@1.1.1':
     resolution: {integrity: sha512-EsshAucklmpuUAfkABPxJNhzj9v2sG7JuzFDL4ML1oJQSV14sqrpTYnsaOudMAw9yOaW53NU3QQTlUQoRs4czw==}
 
   '@livekit/protocol@1.46.4':
     resolution: {integrity: sha512-yJZ8xvyVcs9CczK2V/EQQrSW0MA9VaZ1vL+FI6fd85KhIjfOg26HvrdUl2LZPT78Tu4R4opV4AW58eN5vgmzqg==}
+
+  '@livekit/protocol@1.48.0':
+    resolution: {integrity: sha512-fYHYgltH6YavAsokl3qsHLkBdQeKCl4UORVTub5crS3t8JtKFZ0uinHDFQ+XXdNKS6Ub9gcOjV+UHcDiqnWXoQ==}
 
   '@livekit/rtc-ffi-bindings-darwin-arm64@0.12.60':
     resolution: {integrity: sha512-YHXqybkYfaTc3txJXXWoVogiSP3yKJdkaZlIlZ6IDMGnN9elUoHDYU+ZSn/rbdGu0pp4HUOzffXkbkItN735Bw==}
@@ -2007,6 +2039,10 @@ packages:
     resolution: {integrity: sha512-dRB78srN/l6gqWulah9SrxeYnxeddIG30+GOqK/9OlLVyLg3HPnr6SqOWTWOXKRwC2eGYCkZ59NNuSgvSrpgOA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
+  node-gyp-build@4.8.4:
+    resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
+    hasBin: true
+
   ofetch@1.5.1:
     resolution: {integrity: sha512-2W4oUZlVaqAPAil6FUg/difl6YhqhUR7x2eZY4bQCko22UXg3hptq9KLQdqFClV+Wu85UX7hNtdGTngi/1BxcA==}
 
@@ -3064,10 +3100,10 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
-  '@livekit/agents-plugin-google@1.4.5(@livekit/agents@1.4.5(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(ws@8.21.0)(zod@3.25.76)':
+  '@livekit/agents-plugin-google@1.4.11(@livekit/agents@1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(ws@8.21.0)(zod@3.25.76)':
     dependencies:
       '@google/genai': 1.52.0
-      '@livekit/agents': 1.4.5(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)
+      '@livekit/agents': 1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)
       '@livekit/mutex': 1.1.1
       '@livekit/rtc-node': 0.13.29
       '@types/json-schema': 7.0.15
@@ -3082,9 +3118,9 @@ snapshots:
       - ws
       - zod
 
-  '@livekit/agents-plugin-openai@1.4.5(@livekit/agents@1.4.5(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(zod@3.25.76)':
+  '@livekit/agents-plugin-openai@1.4.11(@livekit/agents@1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(zod@3.25.76)':
     dependencies:
-      '@livekit/agents': 1.4.5(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)
+      '@livekit/agents': 1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)
       '@livekit/mutex': 1.1.1
       '@livekit/rtc-node': 0.13.29
       openai: 6.39.1(ws@8.21.0)(zod@3.25.76)
@@ -3094,12 +3130,13 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@livekit/agents@1.4.5(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)':
+  '@livekit/agents@1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)':
     dependencies:
       '@bufbuild/protobuf': 1.10.1
       '@ffmpeg-installer/ffmpeg': 1.1.0
+      '@livekit/local-inference': 0.2.6
       '@livekit/mutex': 1.1.1
-      '@livekit/protocol': 1.46.4
+      '@livekit/protocol': 1.48.0
       '@livekit/rtc-node': 0.13.29
       '@livekit/throws-transformer': 0.1.8(typescript@5.9.3)
       '@livekit/typed-emitter': 3.0.0
@@ -3138,9 +3175,38 @@ snapshots:
       - typescript
       - utf-8-validate
 
+  '@livekit/local-inference-darwin-arm64@0.2.6':
+    optional: true
+
+  '@livekit/local-inference-darwin-x64@0.2.6':
+    optional: true
+
+  '@livekit/local-inference-linux-arm64-gnu@0.2.6':
+    optional: true
+
+  '@livekit/local-inference-linux-x64-gnu@0.2.6':
+    optional: true
+
+  '@livekit/local-inference-win32-x64-msvc@0.2.6':
+    optional: true
+
+  '@livekit/local-inference@0.2.6':
+    dependencies:
+      node-gyp-build: 4.8.4
+    optionalDependencies:
+      '@livekit/local-inference-darwin-arm64': 0.2.6
+      '@livekit/local-inference-darwin-x64': 0.2.6
+      '@livekit/local-inference-linux-arm64-gnu': 0.2.6
+      '@livekit/local-inference-linux-x64-gnu': 0.2.6
+      '@livekit/local-inference-win32-x64-msvc': 0.2.6
+
   '@livekit/mutex@1.1.1': {}
 
   '@livekit/protocol@1.46.4':
+    dependencies:
+      '@bufbuild/protobuf': 1.10.1
+
+  '@livekit/protocol@1.48.0':
     dependencies:
       '@bufbuild/protobuf': 1.10.1
 
@@ -4546,6 +4612,8 @@ snapshots:
       data-uri-to-buffer: 4.0.1
       fetch-blob: 3.2.0
       formdata-polyfill: 4.0.10
+
+  node-gyp-build@4.8.4: {}
 
   ofetch@1.5.1:
     dependencies:
