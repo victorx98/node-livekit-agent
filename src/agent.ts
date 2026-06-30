@@ -254,6 +254,16 @@ export default defineAgent({
           resolveClosed = resolve;
         });
         session.on(voice.AgentSessionEventTypes.Close, (ev) => {
+          log.info(
+            {
+              event: "agent_session_closed",
+              close_reason: closeReasonName(ev.reason),
+              close_reason_code: ev.reason,
+              err: ev.error,
+              reseed: isReseed,
+            },
+            "realtime session closed",
+          );
           resolveClosed(
             ev.reason === voice.CloseReason.ERROR
               ? { kind: "failed", error: ev.error }
@@ -295,9 +305,26 @@ export default defineAgent({
                   const opener = isReseed
                     ? "Continue the interview from where you left off; do not restart or re-introduce yourself."
                     : cfg.greeting_prompt;
+                  log.info(
+                    {
+                      event: "programmatic_greeting_started",
+                      reseed: isReseed,
+                      instruction_length: opener.length,
+                    },
+                    "starting programmatic greeting",
+                  );
                   await session.generateReply({ instructions: opener });
+                  log.info(
+                    { event: "programmatic_greeting_completed", reseed: isReseed },
+                    "programmatic greeting completed",
+                  );
                 })
-                .catch((err: unknown) => log.warn({ err }, "no candidate joined to greet"));
+                .catch((err: unknown) =>
+                  log.warn(
+                    { event: "programmatic_greeting_failed", err, reseed: isReseed },
+                    "programmatic greeting failed",
+                  ),
+                );
             }
           },
           // Resolve on whichever happens first: the whole interview ending, or
@@ -457,4 +484,9 @@ function classifyFailure(message: string): string {
   if (m.includes("gemini")) return "provider_gated";
   if (m.includes("redis")) return "redis";
   return "error";
+}
+
+function closeReasonName(reason: unknown): string | undefined {
+  if (reason === undefined || reason === null) return undefined;
+  return String(reason);
 }
