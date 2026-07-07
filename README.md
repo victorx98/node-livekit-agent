@@ -64,10 +64,14 @@ is on 8081). A production **K8s manifest** lives in `k8s/`.
 **Not yet** (later phases): proactive session rotation (no-op hook),
 in-interview webhook progress events, cancel enforcement in the child.
 
-> **Model defaults:** per-job metadata should still send `interviewData.model_name`
-> when the backend knows the model. If it is omitted, the worker falls back to
-> `OPENAI_MODEL=gpt-realtime-2` or
-> `GEMINI_MODEL=gemini-live-2.5-flash-native-audio`.
+> **Model defaults:** for OpenAI, per-job metadata `interviewData.model_name`
+> is honored, falling back to `OPENAI_MODEL` (default `gpt-realtime-2`). For
+> Gemini, metadata model names are ignored (dispatchers send LiveKit-style
+> aliases the Live API rejects); the worker uses `GEMINI_MODEL`, defaulting to
+> `gemini-3.1-flash-live-preview`. 3.1 live keeps response latency flat on
+> long speech and long sessions, but does not support programmatic greetings
+> or mid-session instruction updates: with `autoStart`, the agent waits for
+> the candidate to speak first instead of opening the interview itself.
 
 > **Gemini long sessions:** the Google provider enables
 > `contextWindowCompression: { slidingWindow: {} }` by default. The installed

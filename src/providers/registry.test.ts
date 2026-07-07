@@ -93,7 +93,7 @@ describe("realtime provider registry", () => {
     const model = createRealtimeModel({ cfg, env: baseEnv, instructions: "Interview clearly." });
 
     expect(model).toBeInstanceOf(llm.RealtimeModel);
-    expect(model.model).toBe("gemini-2.5-flash-native-audio-preview-12-2025");
+    expect(model.model).toBe("gemini-3.1-flash-live-preview");
     expect(googleOptions(model).instructions).toBe("Interview clearly.");
     expect(googleOptions(model).contextWindowCompression).toEqual({ slidingWindow: {} });
     // Language is API-authored interview intelligence and is never separately
@@ -107,6 +107,26 @@ describe("realtime provider registry", () => {
     expect(googleOptions(model).realtimeInputConfig?.activityHandling).toBe(
       "START_OF_ACTIVITY_INTERRUPTS",
     );
+  });
+
+  it("relaxes end-of-speech sensitivity for 3.1 live models only", () => {
+    // 3.1 responds fast enough that HIGH sensitivity audibly barges in at
+    // natural mid-answer pauses; 2.5 keeps HIGH (it lags without it).
+    const cfg = cfgFrom((m) => {
+      m.interviewData.model_provider = "google";
+    });
+    const model31 = createRealtimeModel({ cfg, env: baseEnv, instructions: "Interview." });
+    expect(
+      googleOptions(model31).realtimeInputConfig?.automaticActivityDetection
+        ?.endOfSpeechSensitivity,
+    ).toBe("END_SENSITIVITY_LOW");
+
+    cfg.model = "gemini-2.5-flash-native-audio-preview-12-2025";
+    const model25 = createRealtimeModel({ cfg, env: baseEnv, instructions: "Interview." });
+    expect(
+      googleOptions(model25).realtimeInputConfig?.automaticActivityDetection
+        ?.endOfSpeechSensitivity,
+    ).toBe("END_SENSITIVITY_HIGH");
   });
 
   it("does not inject metadata language even for a non-native-audio Gemini model", () => {

@@ -1,0 +1,48 @@
+diff --git a/dist/realtime/realtime_api.cjs b/dist/realtime/realtime_api.cjs
+index 8336d2cc652c473b148a67042bbd4985dea56431..1a285629e93ea8801a961942058a3ed9f2a62289 100644
+--- a/dist/realtime/realtime_api.cjs
++++ b/dist/realtime/realtime_api.cjs
+@@ -626,7 +626,10 @@ class RealtimeSession extends import_agents.llm.RealtimeSession {
+           const [turns] = await this._chatCtx.copy({
+             excludeFunctionCall: true
+           }).toProviderFormat("google", false);
+-          if (turns.length > 0) {
++          // Local patch: when reconnecting with a session-resumption handle the
++          // server already restored the conversation; replaying history here
++          // duplicates context on 2.5 and closes the socket with 1007 on 3.1.
++          if (turns.length > 0 && !this.sessionResumptionHandle) {
+             await session.sendClientContent({
+               turns,
+               turnComplete: false
+diff --git a/dist/realtime/realtime_api.js b/dist/realtime/realtime_api.js
+index e7f92c13c4261cf15fd4a810e7cb51d2543b2c75..7f2860ef33fc7972793e48dba405cd12920a631a 100644
+--- a/dist/realtime/realtime_api.js
++++ b/dist/realtime/realtime_api.js
+@@ -611,7 +611,10 @@ class RealtimeSession extends llm.RealtimeSession {
+           const [turns] = await this._chatCtx.copy({
+             excludeFunctionCall: true
+           }).toProviderFormat("google", false);
+-          if (turns.length > 0) {
++          // Local patch: when reconnecting with a session-resumption handle the
++          // server already restored the conversation; replaying history here
++          // duplicates context on 2.5 and closes the socket with 1007 on 3.1.
++          if (turns.length > 0 && !this.sessionResumptionHandle) {
+             await session.sendClientContent({
+               turns,
+               turnComplete: false
+diff --git a/src/realtime/realtime_api.ts b/src/realtime/realtime_api.ts
+index d12ca3b92ad00d2f2cbe33cd5ae78f93cd3721d6..dfc2193fd0cab1e45e06de1b3bdf10331bda5871 100644
+--- a/src/realtime/realtime_api.ts
++++ b/src/realtime/realtime_api.ts
+@@ -1047,7 +1047,10 @@ export class RealtimeSession extends llm.RealtimeSession {
+             })
+             .toProviderFormat('google', false);
+ 
+-          if (turns.length > 0) {
++          // Local patch: when reconnecting with a session-resumption handle the
++          // server already restored the conversation; replaying history here
++          // duplicates context on 2.5 and closes the socket with 1007 on 3.1.
++          if (turns.length > 0 && !this.sessionResumptionHandle) {
+             await session.sendClientContent({
+               turns,
+               turnComplete: false,

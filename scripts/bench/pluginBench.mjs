@@ -92,10 +92,13 @@ const model = new google.realtime.RealtimeModel({
   apiKey: process.env.GOOGLE_API_KEY,
   voice: args.voice,
   instructions,
-  realtimeInputConfig: buildGeminiRealtimeInputConfig({
-    silence_duration_ms: Number(args["silence-duration-ms"]),
-    interrupt_response: true,
-  }),
+  realtimeInputConfig: buildGeminiRealtimeInputConfig(
+    {
+      silence_duration_ms: Number(args["silence-duration-ms"]),
+      interrupt_response: true,
+    },
+    args.model,
+  ),
   contextWindowCompression: buildGeminiContextWindowCompression({
     geminiContextWindowCompressionEnabled: !args["no-compression"],
     geminiContextWindowCompressionTriggerTokens: undefined,

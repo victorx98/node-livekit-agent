@@ -16,13 +16,23 @@ type RealtimeTuning = ResolvedJobConfig["realtime"];
 // Configure end-of-speech detection explicitly (parallel to the OpenAI provider's
 // buildOpenAITurnDetection), reusing cfg.realtime so both providers share the
 // SILENCE_DURATION_MS / INTERRUPT_RESPONSE knobs.
-export function buildGeminiRealtimeInputConfig(rt: RealtimeTuning): RealtimeInputConfig {
+//
+// End sensitivity is model-conditional: 3.1 live replies in ~1s, so HIGH makes
+// it audibly barge in at natural mid-answer pauses (bench 2026-07-07: LOW cut
+// barge-ins ~3x). The 2.5 previews keep HIGH — they lag by tens of seconds
+// without it, and are too slow for their barge-ins to become audible anyway.
+export function buildGeminiRealtimeInputConfig(
+  rt: RealtimeTuning,
+  model: string,
+): RealtimeInputConfig {
   return {
     automaticActivityDetection: {
       prefixPaddingMs: 300,
       silenceDurationMs: rt.silence_duration_ms,
       startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
-      endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
+      endOfSpeechSensitivity: model.includes("3.1")
+        ? EndSensitivity.END_SENSITIVITY_LOW
+        : EndSensitivity.END_SENSITIVITY_HIGH,
     },
     activityHandling: rt.interrupt_response
       ? ActivityHandling.START_OF_ACTIVITY_INTERRUPTS
@@ -79,7 +89,7 @@ export const googleProvider: RealtimeProvider = {
       model: cfg.model,
       apiKey: env.googleApiKey,
       voice: env.googleRealtimeVoice,
-      realtimeInputConfig: buildGeminiRealtimeInputConfig(cfg.realtime),
+      realtimeInputConfig: buildGeminiRealtimeInputConfig(cfg.realtime, cfg.model),
       instructions,
       vertexai: env.googleGenaiUseVertexai,
       project: env.googleCloudProject,

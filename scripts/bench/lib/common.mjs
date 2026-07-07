@@ -13,7 +13,7 @@ export const CHUNK_MS = 50;
 // Mirrors production defaults (src/config/resolveConfig.ts, src/providers/google.ts).
 export const PROD_DEFAULTS = {
   // || not ??: deployments set some of these to empty strings (see .env.local)
-  model: process.env.GEMINI_MODEL || "gemini-2.5-flash-native-audio-preview-12-2025",
+  model: process.env.GEMINI_MODEL || "gemini-3.1-flash-live-preview",
   voice: process.env.GOOGLE_REALTIME_VOICE || "Puck",
   silenceDurationMs: Number(process.env.SILENCE_DURATION_MS || 700),
   prefixPaddingMs: 300,

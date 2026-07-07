@@ -14,8 +14,8 @@
 //     [--turns 1] [--speech-ms 15000 | --speech-ms 5000,15000,30000,60000] \
 //     [--thinking-budget 0] [--no-compression] [--trigger-tokens N] \
 //     [--model id] [--voice Puck] [--silence-duration-ms 700] \
-//     [--instructions-file path] [--resume-test replay|handle-only] \
-//     [--max-wait-ms 120000] [--label name]
+//     [--eos-sensitivity high|low] [--instructions-file path] \
+//     [--resume-test replay|handle-only] [--max-wait-ms 120000] [--label name]
 //
 // Requires GOOGLE_API_KEY in the environment.
 
@@ -50,6 +50,9 @@ const { values: args } = parseArgs({
     model: { type: "string", default: PROD_DEFAULTS.model },
     voice: { type: "string", default: PROD_DEFAULTS.voice },
     "silence-duration-ms": { type: "string", default: String(PROD_DEFAULTS.silenceDurationMs) },
+    // Production hardcodes END_SENSITIVITY_HIGH (tuned for 2.5's lag); 3.1
+    // barges in at natural mid-utterance pauses with it. A/B knob.
+    "eos-sensitivity": { type: "string", default: "high" },
     "instructions-file": { type: "string" },
     "resume-test": { type: "string" },
     "max-wait-ms": { type: "string", default: "120000" },
@@ -93,7 +96,10 @@ const connectConfig = {
       prefixPaddingMs: PROD_DEFAULTS.prefixPaddingMs,
       silenceDurationMs: Number(args["silence-duration-ms"]),
       startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
-      endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
+      endOfSpeechSensitivity:
+        args["eos-sensitivity"] === "low"
+          ? EndSensitivity.END_SENSITIVITY_LOW
+          : EndSensitivity.END_SENSITIVITY_HIGH,
     },
     activityHandling: ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
   },
@@ -387,6 +393,7 @@ try {
       triggerTokens: args["trigger-tokens"] ?? null,
       thinkingBudget: args["thinking-budget"] ?? "default",
       silenceDurationMs: Number(args["silence-duration-ms"]),
+      eosSensitivity: args["eos-sensitivity"],
       voice: args.voice,
       resumeTest: args["resume-test"] ?? null,
       inputTranscription: !args["no-input-transcription"],
