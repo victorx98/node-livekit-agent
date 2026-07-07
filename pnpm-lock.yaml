@@ -15,17 +15,17 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
       '@livekit/agents':
-        specifier: ^1.4.11
-        version: 1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)
+        specifier: ^1.5.0
+        version: 1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76)
       '@livekit/agents-plugin-google':
-        specifier: 1.4.11
-        version: 1.4.11(@livekit/agents@1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(ws@8.21.0)(zod@3.25.76)
+        specifier: 1.5.0
+        version: 1.5.0(@livekit/agents@1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.30)(ws@8.21.0)(zod@3.25.76)
       '@livekit/agents-plugin-openai':
-        specifier: ^1.4.11
-        version: 1.4.11(@livekit/agents@1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(zod@3.25.76)
+        specifier: ^1.5.0
+        version: 1.5.0(@livekit/agents@1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.30)(zod@3.25.76)
       '@livekit/rtc-node':
-        specifier: ^0.13.29
-        version: 0.13.29
+        specifier: ^0.13.30
+        version: 0.13.30
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -45,8 +45,8 @@ importers:
         specifier: ^5.11.0
         version: 5.11.0
       livekit-server-sdk:
-        specifier: ^2.15.4
-        version: 2.15.4
+        specifier: ^2.16.0
+        version: 2.16.0
       pino:
         specifier: ^9.5.0
         version: 9.14.0
@@ -637,24 +637,24 @@ packages:
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
 
-  '@livekit/agents-plugin-google@1.4.11':
-    resolution: {integrity: sha512-WAFjFWhG85d2GwHWGuNRKufrpypsDzBm2JhbAffbjS5Dpf/Sw/G/8SwqeRz/GXaPC//lHNzfWQjJuhv5v8auBA==}
+  '@livekit/agents-plugin-google@1.5.0':
+    resolution: {integrity: sha512-FpALaSXrqvHdrWUEe/e3F08hk7tMomCKA8QeMAWsZsobBcV1YlSjoZV1IqNZbZchy9FLygsK4Lpg7md+6Az33w==}
     peerDependencies:
-      '@livekit/agents': 1.4.11
-      '@livekit/rtc-node': ^0.13.29
+      '@livekit/agents': 1.5.0
+      '@livekit/rtc-node': ^0.13.30
 
-  '@livekit/agents-plugin-openai@1.4.11':
-    resolution: {integrity: sha512-oCSsst08uXPtolA+nS600KtvR67dGtwSBud5cH3bSZipU5xVsK6nnGDGsGuGvDILLp8+8dpXmHDvgRjapyKgsg==}
+  '@livekit/agents-plugin-openai@1.5.0':
+    resolution: {integrity: sha512-B+LJ53vQkT0Vl3QJG1SUmoZ3bW1sP3FNJ4K/l/x7Ghmk6Ryguoa9wnOh4/+R8xwH3Im47/6WXcAFkRB+Kqh4Ww==}
     peerDependencies:
-      '@livekit/agents': 1.4.11
-      '@livekit/rtc-node': ^0.13.29
+      '@livekit/agents': 1.5.0
+      '@livekit/rtc-node': ^0.13.30
       zod: ^3.25.76 || ^4.1.8
 
-  '@livekit/agents@1.4.11':
-    resolution: {integrity: sha512-gM1/+hJ3xPTV3rAVaR0PK4uNJyhh6Z4Ut5RB+RSAvEm3m8UkelCXWapf6AG8VOvGMhO3SxLlaDHb0GcwVYu7Lw==}
+  '@livekit/agents@1.5.0':
+    resolution: {integrity: sha512-vZ0Wx+mmUSh0wEkgnJM734SIx/crpu7ZYiu1Vrsd4I/wD/7U1n1HDc7gxNRGIAtmfRqAq13Vle7mZRP0HkVw3w==}
     hasBin: true
     peerDependencies:
-      '@livekit/rtc-node': ^0.13.29
+      '@livekit/rtc-node': ^0.13.30
       zod: ^3.25.76 || ^4.1.8
 
   '@livekit/local-inference-darwin-arm64@0.2.6':
@@ -688,9 +688,6 @@ packages:
 
   '@livekit/mutex@1.1.1':
     resolution: {integrity: sha512-EsshAucklmpuUAfkABPxJNhzj9v2sG7JuzFDL4ML1oJQSV14sqrpTYnsaOudMAw9yOaW53NU3QQTlUQoRs4czw==}
-
-  '@livekit/protocol@1.46.4':
-    resolution: {integrity: sha512-yJZ8xvyVcs9CczK2V/EQQrSW0MA9VaZ1vL+FI6fd85KhIjfOg26HvrdUl2LZPT78Tu4R4opV4AW58eN5vgmzqg==}
 
   '@livekit/protocol@1.48.0':
     resolution: {integrity: sha512-fYHYgltH6YavAsokl3qsHLkBdQeKCl4UORVTub5crS3t8JtKFZ0uinHDFQ+XXdNKS6Ub9gcOjV+UHcDiqnWXoQ==}
@@ -731,8 +728,8 @@ packages:
     resolution: {integrity: sha512-ZJD2DNoHfR8PzKeyDMH6i1zKpk7S4LlrQDIZvisxj6HPaJnKofzSssNMF8fpGFvVCZ844kbcOFogRPgHFno82w==}
     engines: {node: '>= 18'}
 
-  '@livekit/rtc-node@0.13.29':
-    resolution: {integrity: sha512-3/mhTVW3zEa8u0l2UzLe74CyDxaz/1Fqrss+monBJARYHyMGMiDlnKAwDT2LiFkRy0xBjl2QY8Yldr0icfPUkw==}
+  '@livekit/rtc-node@0.13.30':
+    resolution: {integrity: sha512-chUeAKM2EABTbd0Xtkf+TXPPb+wS8ry7Pze0CSWN/MhC1Lx5QD26qr2LECrzFxnGg4httK0SzlEnpurgboOxiQ==}
     engines: {node: '>= 18'}
 
   '@livekit/throws-transformer@0.1.8':
@@ -1956,8 +1953,8 @@ packages:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
 
-  livekit-server-sdk@2.15.4:
-    resolution: {integrity: sha512-L/Ynu5zH1Qjfifmk3LnymL2JpvtisMFCM2wf7iM6H42WZRx6yvRECXa0hiK9/zi7br8d1x/a7fQIw1yJ/bneOA==}
+  livekit-server-sdk@2.16.0:
+    resolution: {integrity: sha512-Myr90TWbqUujvPpo0N8JS+gtY6jVKgbIRx688cVSL3mp18IVAwhDWyRzNloQBcimHg24zz1JjERTiwOw0wuFIg==}
     engines: {node: '>=18'}
 
   locate-path@6.0.0:
@@ -3100,12 +3097,12 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
-  '@livekit/agents-plugin-google@1.4.11(@livekit/agents@1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(ws@8.21.0)(zod@3.25.76)':
+  '@livekit/agents-plugin-google@1.5.0(@livekit/agents@1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.30)(ws@8.21.0)(zod@3.25.76)':
     dependencies:
       '@google/genai': 1.52.0
-      '@livekit/agents': 1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)
+      '@livekit/agents': 1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76)
       '@livekit/mutex': 1.1.1
-      '@livekit/rtc-node': 0.13.29
+      '@livekit/rtc-node': 0.13.30
       '@types/json-schema': 7.0.15
       google-auth-library: 10.6.2
       json-schema: 0.4.0
@@ -3118,11 +3115,11 @@ snapshots:
       - ws
       - zod
 
-  '@livekit/agents-plugin-openai@1.4.11(@livekit/agents@1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.29)(zod@3.25.76)':
+  '@livekit/agents-plugin-openai@1.5.0(@livekit/agents@1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.30)(zod@3.25.76)':
     dependencies:
-      '@livekit/agents': 1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)
+      '@livekit/agents': 1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76)
       '@livekit/mutex': 1.1.1
-      '@livekit/rtc-node': 0.13.29
+      '@livekit/rtc-node': 0.13.30
       openai: 6.39.1(ws@8.21.0)(zod@3.25.76)
       ws: 8.21.0
       zod: 3.25.76
@@ -3130,14 +3127,14 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@livekit/agents@1.4.11(@livekit/rtc-node@0.13.29)(typescript@5.9.3)(zod@3.25.76)':
+  '@livekit/agents@1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76)':
     dependencies:
       '@bufbuild/protobuf': 1.10.1
       '@ffmpeg-installer/ffmpeg': 1.1.0
       '@livekit/local-inference': 0.2.6
       '@livekit/mutex': 1.1.1
       '@livekit/protocol': 1.48.0
-      '@livekit/rtc-node': 0.13.29
+      '@livekit/rtc-node': 0.13.30
       '@livekit/throws-transformer': 0.1.8(typescript@5.9.3)
       '@livekit/typed-emitter': 3.0.0
       '@opentelemetry/api': 1.9.1
@@ -3159,7 +3156,7 @@ snapshots:
       heap-js: 2.7.1
       json-schema: 0.4.0
       jsonrepair: 3.14.0
-      livekit-server-sdk: 2.15.4
+      livekit-server-sdk: 2.16.0
       ofetch: 1.5.1
       openai: 6.39.1(ws@8.21.0)(zod@3.25.76)
       pidusage: 4.0.1
@@ -3202,10 +3199,6 @@ snapshots:
 
   '@livekit/mutex@1.1.1': {}
 
-  '@livekit/protocol@1.46.4':
-    dependencies:
-      '@bufbuild/protobuf': 1.10.1
-
   '@livekit/protocol@1.48.0':
     dependencies:
       '@bufbuild/protobuf': 1.10.1
@@ -3235,7 +3228,7 @@ snapshots:
       '@livekit/rtc-ffi-bindings-linux-x64-gnu': 0.12.60
       '@livekit/rtc-ffi-bindings-win32-x64-msvc': 0.12.60
 
-  '@livekit/rtc-node@0.13.29':
+  '@livekit/rtc-node@0.13.30':
     dependencies:
       '@datastructures-js/deque': 1.0.8
       '@livekit/mutex': 1.1.1
@@ -4548,10 +4541,10 @@ snapshots:
       prelude-ls: 1.2.1
       type-check: 0.4.0
 
-  livekit-server-sdk@2.15.4:
+  livekit-server-sdk@2.16.0:
     dependencies:
       '@bufbuild/protobuf': 1.10.1
-      '@livekit/protocol': 1.46.4
+      '@livekit/protocol': 1.48.0
       camelcase-keys: 9.1.3
       jose: 5.10.0
 
