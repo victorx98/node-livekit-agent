@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@livekit/agents-plugin-google': 8c8646e15104f350b25a7055b40964deb5d5906fcf2991b73468d04c84e27ff8
+
 importers:
 
   .:
@@ -19,7 +22,7 @@ importers:
         version: 1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76)
       '@livekit/agents-plugin-google':
         specifier: 1.5.0
-        version: 1.5.0(@livekit/agents@1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.30)(ws@8.21.0)(zod@3.25.76)
+        version: 1.5.0(patch_hash=8c8646e15104f350b25a7055b40964deb5d5906fcf2991b73468d04c84e27ff8)(@livekit/agents@1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.30)(ws@8.21.0)(zod@3.25.76)
       '@livekit/agents-plugin-openai':
         specifier: ^1.5.0
         version: 1.5.0(@livekit/agents@1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.30)(zod@3.25.76)
@@ -3097,7 +3100,7 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
-  '@livekit/agents-plugin-google@1.5.0(@livekit/agents@1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.30)(ws@8.21.0)(zod@3.25.76)':
+  '@livekit/agents-plugin-google@1.5.0(patch_hash=8c8646e15104f350b25a7055b40964deb5d5906fcf2991b73468d04c84e27ff8)(@livekit/agents@1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.30)(ws@8.21.0)(zod@3.25.76)':
     dependencies:
       '@google/genai': 1.52.0
       '@livekit/agents': 1.5.0(@livekit/rtc-node@0.13.30)(typescript@5.9.3)(zod@3.25.76)
