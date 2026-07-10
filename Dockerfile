@@ -11,6 +11,7 @@ RUN corepack enable
 # Install deps with the lockfile for reproducible builds.
 # pnpm-workspace.yaml carries the build-script allowlist (esbuild) for pnpm 11+.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 RUN pnpm install --frozen-lockfile
 
 # Build TypeScript -> dist/.
