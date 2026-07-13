@@ -81,6 +81,26 @@ describe("watchInterviewEnd", () => {
     });
   });
 
+  it("lets a 60-minute interview run the full 60 minutes (regression: 59 clamp)", async () => {
+    const room = new FakeRoom();
+    const ended = watch(room, { durationMinutes: 60 });
+
+    // One millisecond before the 60-minute mark: still running.
+    await vi.advanceTimersByTimeAsync(60 * 60_000 - 1);
+    expect(await isPending(ended)).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(ended).resolves.toEqual({ kind: "duration_timeout", durationMinutes: 60 });
+  });
+
+  it("clamps oversized durations to the 60-minute ceiling", async () => {
+    const room = new FakeRoom();
+    const ended = watch(room, { durationMinutes: 90 });
+
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    await expect(ended).resolves.toEqual({ kind: "duration_timeout", durationMinutes: 90 });
+  });
+
   it("resolves immediately when the room disconnects", async () => {
     const room = new FakeRoom();
     const ended = watch(room);

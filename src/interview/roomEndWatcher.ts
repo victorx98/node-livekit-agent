@@ -43,7 +43,9 @@ export function watchInterviewEnd({
   absenceGraceMs,
   log,
 }: WatchInterviewEndOptions): Promise<InterviewEndReason> {
-  const maxMs = Math.min(durationMinutes, 59) * 60_000;
+  // Ceiling 60: the longest bookable interview type is 60 minutes; the old
+  // 59 clamp silently cut a 60-minute session short by a minute.
+  const maxMs = Math.min(durationMinutes, 60) * 60_000;
 
   return new Promise<InterviewEndReason>((resolve) => {
     let settled = false;

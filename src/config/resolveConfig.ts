@@ -319,7 +319,9 @@ export function resolveJobConfig(rawMetadata: unknown, jobId: string): ResolvedJ
       key: m.recordingKey,
       s3_bucket: envStr(env.RECORDING_S3_BUCKET) ?? envStr(env.S3_BUCKET) ?? "",
       s3_region: envStr(env.AWS_REGION) ?? "",
-      audio_only: env.RECORDING_AUDIO_ONLY === "true",
+      // Per-job override first (metadata.options.audioOnly), env default
+      // second — lets the dispatcher choose the media mode per interview.
+      audio_only: m.options.audioOnly ?? env.RECORDING_AUDIO_ONLY === "true",
     },
 
     options: {

@@ -15,6 +15,11 @@ export const AgentMetadataSchema = z.object({
     autoStart: z.boolean().default(true),
     enableLogging: z.boolean().default(true),
     enableRecording: z.boolean().default(false),
+    // Per-job media mode: when present it overrides the env-level
+    // RECORDING_AUDIO_ONLY default, so one agent fleet can serve video and
+    // audio-only interviews side by side. Optional (no default) so absence is
+    // distinguishable from an explicit false in resolveConfig.
+    audioOnly: z.boolean().optional(),
   }),
   interviewData: z.object({
     position: z.string(),

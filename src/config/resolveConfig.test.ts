@@ -235,6 +235,28 @@ describe("resolveJobConfig - API-authoritative interview execution", () => {
     expect(cfg.recording.s3_bucket).toBe("bucket");
   });
 
+  it("prefers the per-job audioOnly flag over the env default", () => {
+    // Env says video; the job says audio-only — the job wins.
+    vi.stubEnv("RECORDING_AUDIO_ONLY", "false");
+    const audioJob = resolveSample((metadata) => {
+      metadata.options.audioOnly = true;
+    });
+    expect(audioJob.recording.audio_only).toBe(true);
+
+    // Env says audio-only; the job explicitly says video — the job wins.
+    vi.stubEnv("RECORDING_AUDIO_ONLY", "true");
+    const videoJob = resolveSample((metadata) => {
+      metadata.options.audioOnly = false;
+    });
+    expect(videoJob.recording.audio_only).toBe(false);
+  });
+
+  it("falls back to env RECORDING_AUDIO_ONLY when the job does not set audioOnly", () => {
+    vi.stubEnv("RECORDING_AUDIO_ONLY", "true");
+    const cfg = resolveSample();
+    expect(cfg.recording.audio_only).toBe(true);
+  });
+
   it("rejects malformed metadata, unsupported providers, and invalid durations", () => {
     expect(() => resolveJobConfig("{ not valid json", JOB_ID)).toThrow();
     expect(() =>
