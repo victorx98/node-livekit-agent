@@ -17,6 +17,7 @@ import {
   watchInterviewEnd,
   type InterviewEndReason,
 } from "./interview/roomEndWatcher.js";
+import { deleteRoomBestEffort } from "./interview/roomTeardown.js";
 import {
   ContextManager,
   type ManagedSession,
@@ -370,6 +371,25 @@ export default defineAgent({
         },
         "room ended or duration reached",
       );
+
+      // The interview is over, but the room may still hold a zombie candidate
+      // connection (background tab, locked laptop) that blocks LiveKit's
+      // empty-timeout and keeps the room session alive for hours. Delete the
+      // room so remaining participants are kicked and room_finished fires.
+      // Skip room_disconnected: the room is already gone in that case.
+      if (interviewEndReason?.kind !== "room_disconnected") {
+        const teardown = await deleteRoomBestEffort({
+          roomName,
+          livekitUrl: env.livekitUrl,
+          livekitApiKey: env.livekitApiKey,
+          livekitApiSecret: env.livekitApiSecret,
+          log,
+        });
+        log.info(
+          { event: "room_teardown", outcome: teardown, room: roomName },
+          "room teardown after interview end",
+        );
+      }
 
       await writeChain; // drain pending turn writes before finalizing
       await tracker.update(cfg.job_id, {
