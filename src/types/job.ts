@@ -56,6 +56,8 @@ export interface AgentMetadata {
     autoStart: boolean;
     enableLogging: boolean;
     enableRecording: boolean;
+    /** Per-job media mode; absent → env RECORDING_AUDIO_ONLY default. */
+    audioOnly?: boolean;
   };
   createdAt: string;
 }
