@@ -18,14 +18,14 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
       '@livekit/agents':
-        specifier: ^1.5.1
-        version: 1.5.1(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76)
+        specifier: ^1.5.2
+        version: 1.5.2(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76)
       '@livekit/agents-plugin-google':
-        specifier: 1.5.1
-        version: 1.5.1(patch_hash=8c8646e15104f350b25a7055b40964deb5d5906fcf2991b73468d04c84e27ff8)(@livekit/agents@1.5.1(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.31)(ws@8.21.0)(zod@3.25.76)
+        specifier: 1.5.2
+        version: 1.5.2(patch_hash=8c8646e15104f350b25a7055b40964deb5d5906fcf2991b73468d04c84e27ff8)(@livekit/agents@1.5.2(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.31)(ws@8.21.0)(zod@3.25.76)
       '@livekit/agents-plugin-openai':
-        specifier: ^1.5.1
-        version: 1.5.1(@livekit/agents@1.5.1(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.31)(zod@3.25.76)
+        specifier: ^1.5.2
+        version: 1.5.2(@livekit/agents@1.5.2(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.31)(zod@3.25.76)
       '@livekit/rtc-node':
         specifier: ^0.13.31
         version: 0.13.31
@@ -597,21 +597,21 @@ packages:
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
 
-  '@livekit/agents-plugin-google@1.5.1':
-    resolution: {integrity: sha512-/gAFFPGmDqPJPpOoNMMQHWnYJBFb8dshqfAIrTducRwIrlIzrGDEyBU7TcrhFjVZISihE8jIukpc7/ZGdtygfQ==}
+  '@livekit/agents-plugin-google@1.5.2':
+    resolution: {integrity: sha512-Yc2TXPLtxExVUQkS8OUlshpESkTryuNI7bOGjMIGTqobJ01crqfvkl19fWO7ll1OSqdeNFvynyOUMGTeV0OhxA==}
     peerDependencies:
-      '@livekit/agents': 1.5.1
+      '@livekit/agents': 1.5.2
       '@livekit/rtc-node': ^0.13.31
 
-  '@livekit/agents-plugin-openai@1.5.1':
-    resolution: {integrity: sha512-qhaUtrPkVshe+TzYEWE6SzwP+P6Yv70LB/ulYa+oBOZRkT1RitXdftNXxowMNu90maz7vKB0mrexMzuvVHdQOw==}
+  '@livekit/agents-plugin-openai@1.5.2':
+    resolution: {integrity: sha512-EPcTvGaxhRNme7Nuby38N6EmLz62q8R/KUbXPgN1qISNXR7UdPOVy4gTO1O10EnWNrOD5KWr5xVce9gK/q8ZEA==}
     peerDependencies:
-      '@livekit/agents': 1.5.1
+      '@livekit/agents': 1.5.2
       '@livekit/rtc-node': ^0.13.31
       zod: ^3.25.76 || ^4.1.8
 
-  '@livekit/agents@1.5.1':
-    resolution: {integrity: sha512-pA9kddXEJBIZeJDBbK2EedI3cIfbh2vs87qLrieo7/CH8gRrtHoYNEKp56WYUf9lkih8bYQLJhvLPL18Mfl5/g==}
+  '@livekit/agents@1.5.2':
+    resolution: {integrity: sha512-/uFG7RVqt2bmd4fzjN5Nl6QzGHIgDr6f8DPYqo0UM1hP8YXD0nhWR04rG5EnW7mOvxEZfQrBfrLn1nV6/h2vkA==}
     hasBin: true
     peerDependencies:
       '@livekit/rtc-node': ^0.13.31
@@ -1485,14 +1485,6 @@ packages:
     resolution: {integrity: sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ==}
     engines: {node: '>=6'}
 
-  camelcase-keys@9.1.3:
-    resolution: {integrity: sha512-Rircqi9ch8AnZscQcsA1C47NFdaO3wukpmIRzYcDOrmvgt78hM/sj5pZhZNec2NM12uk5vTwRHZ4anGcrC4ZTg==}
-    engines: {node: '>=16'}
-
-  camelcase@8.0.0:
-    resolution: {integrity: sha512-8WB3Jcas3swSvjIeA2yvCJ+Miyz5l1ZmB6HFb9R1317dt9LCQoswg/BGrmAmkWVEszSrrg4RwmO46qIm2OEnSA==}
-    engines: {node: '>=16'}
-
   chai@5.3.3:
     resolution: {integrity: sha512-4zNhdJD/iOjSH0A05ea+Ke6MU5mmpQcbQsSOkgdaUMJ9zTlDTD/GYlwohmIE2u0gaxHYiVHEn1Fw9mZ/ktJWgw==}
     engines: {node: '>=18'}
@@ -1947,10 +1939,6 @@ packages:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
 
-  livekit-server-sdk@2.16.0:
-    resolution: {integrity: sha512-Myr90TWbqUujvPpo0N8JS+gtY6jVKgbIRx688cVSL3mp18IVAwhDWyRzNloQBcimHg24zz1JjERTiwOw0wuFIg==}
-    engines: {node: '>=18'}
-
   livekit-server-sdk@2.17.0:
     resolution: {integrity: sha512-GWNEQrUD13UwZNrmosyTVFPgeBvSU2lFKGxdA4DaUI5F4sMb1cGeep/PPEE9vvRNELJYpxWS0ImS4gQmovKUDA==}
     engines: {node: '>=18'}
@@ -1977,10 +1965,6 @@ packages:
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
-
-  map-obj@5.0.0:
-    resolution: {integrity: sha512-2L3MIgJynYrZ3TYMriLDLWocz15okFakV6J12HXvMXDHui2x/zgChzg1u9mFFGbbGWE+GsLpQByt4POb9Or+uA==}
-    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -2185,10 +2169,6 @@ packages:
   quick-format-unescaped@4.0.4:
     resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
 
-  quick-lru@6.1.2:
-    resolution: {integrity: sha512-AAFUA5O1d83pIHEhJwWCq/RQcRukCkn/NSm2QsTEMle5f2hP0ChI2+3Xb051PZCkLryI/Ir1MVKviT2FIloaTQ==}
-    engines: {node: '>=12'}
-
   readable-stream@4.7.0:
     resolution: {integrity: sha512-oIGGmcpTLwPga8Bn6/Z75SVaH1z5dUut2ibSyAMVhmUggWpmDn2dapB0n7f8nwaSiRtepAsfJyfXIO5DCVAODg==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
@@ -2375,10 +2355,6 @@ packages:
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
     engines: {node: '>= 0.8.0'}
-
-  type-fest@4.41.0:
-    resolution: {integrity: sha512-TeTSQ6H5YHvpqVwBRcnLDCBnDOHWYu7IvGbHT6N8AOymcr9PJGjc1GTtiWZTYg0NCgYwvnYWEkVChQAr9bjfwA==}
-    engines: {node: '>=16'}
 
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
@@ -3060,10 +3036,10 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
-  '@livekit/agents-plugin-google@1.5.1(patch_hash=8c8646e15104f350b25a7055b40964deb5d5906fcf2991b73468d04c84e27ff8)(@livekit/agents@1.5.1(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.31)(ws@8.21.0)(zod@3.25.76)':
+  '@livekit/agents-plugin-google@1.5.2(patch_hash=8c8646e15104f350b25a7055b40964deb5d5906fcf2991b73468d04c84e27ff8)(@livekit/agents@1.5.2(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.31)(ws@8.21.0)(zod@3.25.76)':
     dependencies:
       '@google/genai': 1.52.0
-      '@livekit/agents': 1.5.1(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76)
+      '@livekit/agents': 1.5.2(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76)
       '@livekit/mutex': 1.1.1
       '@livekit/rtc-node': 0.13.31
       '@types/json-schema': 7.0.15
@@ -3078,9 +3054,9 @@ snapshots:
       - ws
       - zod
 
-  '@livekit/agents-plugin-openai@1.5.1(@livekit/agents@1.5.1(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.31)(zod@3.25.76)':
+  '@livekit/agents-plugin-openai@1.5.2(@livekit/agents@1.5.2(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76))(@livekit/rtc-node@0.13.31)(zod@3.25.76)':
     dependencies:
-      '@livekit/agents': 1.5.1(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76)
+      '@livekit/agents': 1.5.2(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76)
       '@livekit/mutex': 1.1.1
       '@livekit/rtc-node': 0.13.31
       openai: 6.39.1(ws@8.21.0)(zod@3.25.76)
@@ -3090,7 +3066,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@livekit/agents@1.5.1(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76)':
+  '@livekit/agents@1.5.2(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@3.25.76)':
     dependencies:
       '@bufbuild/protobuf': 1.10.1
       '@livekit/av': 7.1.501
@@ -3119,7 +3095,7 @@ snapshots:
       heap-js: 2.7.1
       json-schema: 0.4.0
       jsonrepair: 3.14.0
-      livekit-server-sdk: 2.16.0
+      livekit-server-sdk: 2.17.0
       ofetch: 1.5.1
       openai: 6.39.1(ws@8.21.0)(zod@3.25.76)
       pidusage: 4.0.1
@@ -4036,15 +4012,6 @@ snapshots:
 
   callsites@3.1.0: {}
 
-  camelcase-keys@9.1.3:
-    dependencies:
-      camelcase: 8.0.0
-      map-obj: 5.0.0
-      quick-lru: 6.1.2
-      type-fest: 4.41.0
-
-  camelcase@8.0.0: {}
-
   chai@5.3.3:
     dependencies:
       assertion-error: 2.0.1
@@ -4531,13 +4498,6 @@ snapshots:
       prelude-ls: 1.2.1
       type-check: 0.4.0
 
-  livekit-server-sdk@2.16.0:
-    dependencies:
-      '@bufbuild/protobuf': 1.10.1
-      '@livekit/protocol': 1.48.0
-      camelcase-keys: 9.1.3
-      jose: 5.10.0
-
   livekit-server-sdk@2.17.0:
     dependencies:
       '@bufbuild/protobuf': 1.10.1
@@ -4561,8 +4521,6 @@ snapshots:
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
-
-  map-obj@5.0.0: {}
 
   math-intrinsics@1.1.0: {}
 
@@ -4790,8 +4748,6 @@ snapshots:
 
   quick-format-unescaped@4.0.4: {}
 
-  quick-lru@6.1.2: {}
-
   readable-stream@4.7.0:
     dependencies:
       abort-controller: 3.0.0
@@ -5000,8 +4956,6 @@ snapshots:
   type-check@0.4.0:
     dependencies:
       prelude-ls: 1.2.1
-
-  type-fest@4.41.0: {}
 
   typescript@5.9.3: {}
 
