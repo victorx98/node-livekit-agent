@@ -1,9 +1,4 @@
-import {
-  S3Client,
-  HeadBucketCommand,
-  PutObjectCommand,
-  DeleteObjectCommand,
-} from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 // Thin S3 preflight adapter (§16). The only module that talks to S3. It proves,
 // before the interview starts, that the bucket exists and the credentials can
@@ -34,8 +29,12 @@ function assertConfigured(config: S3PreflightConfig): void {
 }
 
 /**
- * Build the S3 preflight thunk the Recorder calls. Runs HeadBucket -> PutObject
- * -> DeleteObject; any failure rejects with a descriptive, contextual error.
+ * Build the S3 preflight thunk the Recorder calls. Runs PutObject ->
+ * DeleteObject; any failure rejects with a descriptive, contextual error.
+ *
+ * Deliberately no HeadBucket: it requires s3:ListBucket, which least-privilege
+ * recording credentials often lack, while Egress itself only writes objects.
+ * The probe write already proves the bucket exists (NoSuchBucket otherwise).
  */
 export function createS3Preflight(config: S3PreflightConfig): () => Promise<void> {
   return async () => {
@@ -51,7 +50,6 @@ export function createS3Preflight(config: S3PreflightConfig): () => Promise<void
     const probeKey = preflightObjectKey(config.key);
 
     try {
-      await client.send(new HeadBucketCommand({ Bucket: config.bucket }));
       await client.send(
         new PutObjectCommand({ Bucket: config.bucket, Key: probeKey, Body: "preflight" }),
       );
