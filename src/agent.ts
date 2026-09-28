@@ -33,13 +33,16 @@ import { LiveKitEgressGateway } from "./recording/egressGateway.js";
 import { createS3Preflight } from "./recording/s3Preflight.js";
 import { sendWebhook, type WebhookEvent } from "./ops/webhook.js";
 import { getChildMetrics } from "./ops/telemetry.js";
+import type { JobRecord } from "./types/tracker.js";
 
 // Phase 4: recording + final webhook. On top of Phase 3 (reconnect + reseed),
-// the worker runs an S3 preflight and starts a LiveKit Egress before the
-// interview (required-vs-degrade per RECORDING_REQUIRED, §16), stops the egress
-// on teardown, and emits exactly one final-state webhook — job_completed or
-// job_failed — with a bounded retry (§17). Webhook delivery never crashes
-// teardown. The Phase 3 ContextManager + per-turn Redis write-through are intact.
+// the worker starts the S3 preflight and LiveKit Egress in parallel with the
+// realtime session so the greeting is not blocked on egress (required-vs-degrade
+// per RECORDING_REQUIRED, §16). A required recording failure still fails the
+// job and closes a session that has already started. Teardown stops the egress
+// and emits exactly one final-state webhook — job_completed or job_failed —
+// with a bounded retry (§17). Webhook delivery never crashes teardown. The
+// Phase 3 ContextManager + per-turn Redis write-through are intact.
 
 export default defineAgent({
   prewarm: (_proc: JobProcess) => {
@@ -83,6 +86,17 @@ export default defineAgent({
 
     const store = new RedisStore(getRedis());
     const tracker = new RedisJobTracker(store);
+    // Job updates are read-modify-write. Recording status and session status
+    // now land at the same time, so serialize them or one patch drops the other.
+    let trackerWrites: Promise<void> = Promise.resolve();
+    const updateJob = (patch: Partial<JobRecord>): Promise<void> => {
+      const write = trackerWrites.then(() => tracker.update(cfg.job_id, patch));
+      trackerWrites = write.then(
+        () => undefined,
+        () => undefined,
+      );
+      return write;
+    };
 
     await tracker.create(cfg.job_id, {
       room: roomName,
@@ -127,7 +141,7 @@ export default defineAgent({
       if (speaker === "interviewer" || speaker === "candidate") {
         state = appendTurn(state, { role: speaker, text, at });
         await store.saveInterviewState(state);
-        await tracker.update(cfg.job_id, { turns: state.stats.turns, lastActivityAt: at });
+        await updateJob({ turns: state.stats.turns, lastActivityAt: at });
       }
     };
 
@@ -164,6 +178,10 @@ export default defineAgent({
       log,
     });
     let recording: RecordingResult = { status: "disabled" };
+    let recordingError: Error | undefined;
+    let recordingTask: Promise<void> = Promise.resolve();
+    let interviewRun: Promise<void> = Promise.resolve();
+    let activeSession: ManagedSession | undefined;
 
     // Final-state webhook event (§17). Default to failed; only the clean
     // completion path flips it to job_completed. Emitted once, in `finally`.
@@ -171,7 +189,7 @@ export default defineAgent({
 
     try {
       await ctx.connect();
-      await tracker.update(cfg.job_id, { status: "connected" });
+      await updateJob({ status: "connected" });
       log.info(
         {
           event: "room_connected",
@@ -187,16 +205,31 @@ export default defineAgent({
         );
       }
 
-      // Preflight + start recording before the interview. When recording is
-      // required this throws on failure (caught below -> job_failed); otherwise
-      // it degrades to "failed" and the interview continues without a recording.
-      recording = await recorder.start();
-      await tracker.update(cfg.job_id, {
-        egressId: recording.egressId,
-        recording: recording.status,
-      });
-      if (recording.status === "active") metrics.recordingStarted();
-      else if (recording.status === "failed") metrics.recordingStartFailed();
+      // Start recording without awaiting it. The greeting used to wait on the
+      // S3 preflight and Egress round-trip (~1.4s in production, longer from a
+      // laptop). Required failures still reject this promise and close the
+      // session; optional failures resolve as status "failed".
+      recordingTask = (async () => {
+        try {
+          const started = await recorder.start();
+          recording = started;
+          await updateJob({
+            egressId: started.egressId,
+            recording: started.status,
+          });
+          if (started.status === "active") metrics.recordingStarted();
+          else if (started.status === "failed") metrics.recordingStartFailed();
+        } catch (err) {
+          recordingError = err instanceof Error ? err : new Error(String(err));
+          await activeSession?.close().catch((closeErr: unknown) => {
+            log.error(
+              { event: "session_close_failed", err: closeErr },
+              "failed to close session after required recording failure",
+            );
+          });
+          throw recordingError;
+        }
+      })();
 
       const candidateIdentity = candidateIdentityFromParticipantId(cfg.participant_id);
       let interviewEndReason: InterviewEndReason | undefined;
@@ -262,8 +295,9 @@ export default defineAgent({
           );
         });
 
-        return {
+        const managed: ManagedSession = {
           start: async () => {
+            if (recordingError) throw recordingError;
             await session.start({
               agent,
               room: ctx.room,
@@ -272,7 +306,7 @@ export default defineAgent({
                 closeOnDisconnect: false,
               },
             });
-            await tracker.update(cfg.job_id, {
+            await updateJob({
               status: "in_progress",
               lastActivityAt: new Date().toISOString(),
             });
@@ -309,6 +343,8 @@ export default defineAgent({
             await session.close();
           },
         };
+        activeSession = managed;
+        return managed;
       };
 
       const recoveryLimits = {
@@ -355,14 +391,29 @@ export default defineAgent({
             await store.saveInterviewState(state);
           });
           await writeChain; // ensure the bumped state is persisted before reseed reads it
-          await tracker.update(cfg.job_id, { status: "reconnecting", reconnects: attempt });
+          await updateJob({ status: "reconnecting", reconnects: attempt });
           metrics.providerReconnect(jobLabels);
         },
         maxReconnects: env.reconnectMaxRetries,
         log,
+        isAborted: () => recordingError !== undefined,
+        abortError: () => recordingError ?? new Error("recording failed"),
       });
 
-      await ctxMgr.run();
+      // Swallow a late rejection when the recording failure wins the race and
+      // this run is abandoned. Awaiting it below still surfaces the error.
+      interviewRun = ctxMgr.run();
+      void interviewRun.catch(() => undefined);
+
+      const winner = await Promise.race([
+        interviewRun.then(() => "interview" as const),
+        recordingTask.then(() => "recording" as const),
+      ]);
+      if (winner === "recording") await interviewRun;
+      // Required recording can still fail after the interview promise settled
+      // (session closed by the failure, or a very short call). Wait so that
+      // failure marks the job failed instead of completed.
+      await recordingTask;
       log.info(
         {
           event: "interview_ended",
@@ -392,7 +443,7 @@ export default defineAgent({
       }
 
       await writeChain; // drain pending turn writes before finalizing
-      await tracker.update(cfg.job_id, {
+      await updateJob({
         status: "completed",
         endedAt: new Date().toISOString(),
       });
@@ -406,7 +457,7 @@ export default defineAgent({
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log.error({ event: "job_failed", err }, "interview job failed");
-      await tracker.update(cfg.job_id, {
+      await updateJob({
         status: "failed",
         error: message,
         endedAt: new Date().toISOString(),
@@ -415,13 +466,17 @@ export default defineAgent({
       throw err;
     } finally {
       await writeChain;
+      // Recording may still be starting when the interview ends or fails.
+      // Settle it so egressId is visible before stop, and so a rejection here
+      // cannot escape as an unhandled promise.
+      await recordingTask.catch(() => undefined);
+      await interviewRun.catch(() => undefined);
 
       // Stop the egress (safe: ignores an already-stopped race when the room
       // ended on its own) and reflect the stopped state on the job record.
       if (recording.egressId) {
         await recorder.stop(recording.egressId);
-        await tracker
-          .update(cfg.job_id, { recording: "stopped" })
+        await updateJob({ recording: "stopped" })
           .catch((err: unknown) =>
             log.error({ event: "redis_write_failed", err }, "recording-stopped update failed"),
           );
