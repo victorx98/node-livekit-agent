@@ -33,6 +33,13 @@ export interface ContextManagerDeps {
   /** Maximum reconnect attempts after the initial session before giving up. */
   maxReconnects: number;
   log: MinimalLogger;
+  /**
+   * When this becomes true, stop the loop instead of reconnecting. Used when a
+   * required recording fails after the realtime session has already started.
+   */
+  isAborted?: () => boolean;
+  /** Error thrown when `isAborted` is set. Defaults to a generic abort. */
+  abortError?: () => Error;
 }
 
 export class ContextManager {
@@ -52,10 +59,17 @@ export class ContextManager {
    * Each retry reseeds from durable state via `buildSeed(true)`.
    */
   async run(): Promise<void> {
-    const { buildSeed, createSession, onReconnect, maxReconnects, log } = this.deps;
+    const { buildSeed, createSession, onReconnect, maxReconnects, log, isAborted, abortError } =
+      this.deps;
+
+    const throwIfAborted = (): void => {
+      if (!isAborted?.()) return;
+      throw abortError?.() ?? new Error("session aborted");
+    };
 
     let attempt = 0;
     for (;;) {
+      throwIfAborted();
       const isReseed = attempt > 0;
       if (isReseed) {
         await onReconnect(attempt);
@@ -66,6 +80,7 @@ export class ContextManager {
       }
 
       const seed = await buildSeed(isReseed);
+      throwIfAborted();
       const session = await createSession(seed);
 
       let outcome: SessionOutcome;
@@ -86,7 +101,14 @@ export class ContextManager {
         }
       }
 
-      if (outcome.kind === "ended") return;
+      if (outcome.kind === "ended") {
+        // A required-recording failure closes the live session, which looks like
+        // a normal end. Surface the abort instead of treating that as success.
+        throwIfAborted();
+        return;
+      }
+
+      throwIfAborted();
 
       log.warn(
         { event: "provider_session_failed", attempt, err: outcome.error },

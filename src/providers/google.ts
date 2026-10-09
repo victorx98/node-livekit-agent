@@ -17,10 +17,15 @@ type RealtimeTuning = ResolvedJobConfig["realtime"];
 // buildOpenAITurnDetection), reusing cfg.realtime so both providers share the
 // SILENCE_DURATION_MS / INTERRUPT_RESPONSE knobs.
 //
-// End sensitivity is model-conditional: 3.1 live replies in ~1s, so HIGH makes
-// it audibly barge in at natural mid-answer pauses (bench 2026-07-07: LOW cut
-// barge-ins ~3x). The 2.5 previews keep HIGH — they lag by tens of seconds
-// without it, and are too slow for their barge-ins to become audible anyway.
+// End sensitivity is model-conditional: low-latency Live models (3.1 / 3.8)
+// reply in ~1s, so HIGH barge-in at natural mid-answer pauses is audible
+// (bench 2026-07-07: LOW cut barge-ins ~3x). The 2.5 previews keep HIGH —
+// they lag by tens of seconds without it, and are too slow for barge-ins
+// to become audible anyway.
+function isLowLatencyGeminiLive(model: string): boolean {
+  return model.includes("3.1") || model.includes("3.8");
+}
+
 export function buildGeminiRealtimeInputConfig(
   rt: RealtimeTuning,
   model: string,
@@ -30,7 +35,7 @@ export function buildGeminiRealtimeInputConfig(
       prefixPaddingMs: 300,
       silenceDurationMs: rt.silence_duration_ms,
       startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
-      endOfSpeechSensitivity: model.includes("3.1")
+      endOfSpeechSensitivity: isLowLatencyGeminiLive(model)
         ? EndSensitivity.END_SENSITIVITY_LOW
         : EndSensitivity.END_SENSITIVITY_HIGH,
     },
@@ -70,7 +75,8 @@ export const googleProvider: RealtimeProvider = {
     return {
       nativeRecovery: "session_resumption",
       // The installed LiveKit Google plugin disables mid-session chat-context
-      // updates for 3.1 models, which also blocks generateReply().
+      // updates for 3.1 models, which also blocks generateReply(). 3.8 Live is
+      // treated as mutable by the plugin (!model.includes('3.1')).
       supportsProgrammaticGreeting: !cfg.model.includes("3.1"),
     };
   },

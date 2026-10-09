@@ -6,7 +6,7 @@ import {
   getRealtimeProvider,
   type RealtimeProviderRegistry,
 } from "./registry.js";
-import { resolveJobConfig } from "../config/resolveConfig.js";
+import { DEFAULT_GEMINI_MODEL, resolveJobConfig } from "../config/resolveConfig.js";
 import { sampleAgentMetadata } from "../config/sampleMetadata.js";
 import type { AgentMetadata } from "../types/job.js";
 import type { Env } from "../config/env.js";
@@ -93,7 +93,7 @@ describe("realtime provider registry", () => {
     const model = createRealtimeModel({ cfg, env: baseEnv, instructions: "Interview clearly." });
 
     expect(model).toBeInstanceOf(llm.RealtimeModel);
-    expect(model.model).toBe("gemini-3.1-flash-live-preview");
+    expect(model.model).toBe(DEFAULT_GEMINI_MODEL);
     expect(googleOptions(model).instructions).toBe("Interview clearly.");
     expect(googleOptions(model).contextWindowCompression).toEqual({ slidingWindow: {} });
     // Language is API-authored interview intelligence and is never separately

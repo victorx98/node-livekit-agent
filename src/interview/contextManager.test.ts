@@ -123,4 +123,24 @@ describe("ContextManager — reconnect + reseed loop", () => {
     expect(createSession).toHaveBeenCalledTimes(2);
     expect(sessions[0]?.close).toHaveBeenCalledTimes(1); // failed session still closed
   });
+
+  it("does not reconnect when the run is aborted", async () => {
+    let aborted = false;
+    const failed = fakeSession({ kind: "failed", error: new Error("socket gone") });
+    const manager = new ContextManager({
+      buildSeed: async () => ({ instructions: "INSTR", recovered: false }),
+      createSession: async () => {
+        aborted = true;
+        return failed;
+      },
+      onReconnect: async () => {},
+      maxReconnects: 3,
+      log: noopLog,
+      isAborted: () => aborted,
+      abortError: () => new Error("recording is required but could not start"),
+    });
+
+    await expect(manager.run()).rejects.toThrow(/recording is required/);
+    expect(failed.close).toHaveBeenCalledTimes(1);
+  });
 });

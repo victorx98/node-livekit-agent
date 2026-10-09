@@ -7,11 +7,10 @@ import type {
 import type { InterviewQuestion } from "../types/job.js";
 
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
-// 3.1 live: flat response latency on long speech/sessions, unlike the 2.5
-// native-audio previews (bench-results 2026-07-07; Google forum #115508).
-// Trade-off: no programmatic greeting or mid-session updates — see
-// providers/google.ts capabilities().
-export const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-live-preview";
+// Gemini Live default: prefer current stable Live model. Override via GEMINI_MODEL.
+// 3.8 Live (Sep 2026) supersedes 3.1 flash-live-preview; 2.5 native-audio previews
+// lag on long speech/sessions (bench-results 2026-07-07; Google forum #115508).
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-live";
 
 // Adapter from the LiveKit dispatch metadata to the internal ResolvedJobConfig
 // (§8.2–§8.4). Compatibility normalization lives here so downstream modules only
