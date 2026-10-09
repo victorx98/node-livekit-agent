@@ -3,14 +3,28 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
 
-  agent:
+  agent-sa2:
+    container_name: agent-sa2
     build: .
-    env_file: .env.local
+    env_file: .env.sa2
     environment:
       REDIS_URL: redis://redis:6379
     ports:
       - "8080:8080"
       - "8081:8081"
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  agent-vibeid:
+    container_name: agent-vibeid
+    build: .
+    env_file: .env.vibeid
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "8090:8080"
+      - "8091:8081"
     depends_on:
       - redis
     restart: unless-stopped
