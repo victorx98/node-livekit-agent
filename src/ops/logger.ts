@@ -13,6 +13,7 @@ const REDACT_PATHS = [
   "awsAccessKeyId",
   "awsSecretAccessKey",
   "authorization",
+  "aiUsageServiceToken",
   "password",
   // one level of nesting for the same secret-bearing keys
   "*.openaiApiKey",
@@ -22,6 +23,7 @@ const REDACT_PATHS = [
   "*.awsAccessKeyId",
   "*.awsSecretAccessKey",
   "*.authorization",
+  "*.aiUsageServiceToken",
   "*.password",
 ];
 

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { defineAgent, voice, type JobContext, type JobProcess } from "@livekit/agents";
 import { resolveJobConfig } from "./config/resolveConfig.js";
 import { extractJobMetadata } from "./config/metadata.js";
@@ -34,6 +34,7 @@ import { createS3Preflight } from "./recording/s3Preflight.js";
 import { sendWebhook, type WebhookEvent } from "./ops/webhook.js";
 import { getChildMetrics } from "./ops/telemetry.js";
 import type { JobRecord } from "./types/tracker.js";
+import { buildUsageReceipt, deliverUsage } from "./ops/aiUsage.js";
 
 // Phase 4: recording + final webhook. On top of Phase 3 (reconnect + reseed),
 // the worker starts the S3 preflight and LiveKit Egress in parallel with the
@@ -71,6 +72,10 @@ export default defineAgent({
       room: roomName,
       metadata_source: extractedMetadata.source,
     });
+    const usageDeliveries = new Set<Promise<void>>();
+    if (!env.aiUsageUrl) {
+      log.warn({ event: "ai_usage_not_configured" }, "AI usage reporting is not configured");
+    }
     log.info(
       {
         event: "interview_instruction_resolved",
@@ -269,6 +274,29 @@ export default defineAgent({
           // speaking; the framework's 10s first-frame timeout would otherwise
           // drop the response to any answer longer than ~10s (§8.3).
           forwardAudioIdleTimeout: env.forwardAudioIdleTimeoutMs,
+        });
+        const connectionId = randomUUID();
+        session.on(voice.AgentSessionEventTypes.MetricsCollected, (event) => {
+          if (event.metrics.type !== "realtime_model_metrics" || !env.aiUsageUrl || !env.aiUsageServiceToken) return;
+          const receipt = buildUsageReceipt(event.metrics, {
+            jobId: cfg.job_id,
+            interviewId: cfg.interview_id,
+            connectionId,
+            provider: cfg.model_provider,
+            model: cfg.model,
+            environment: env.aiUsageEnvironment ?? "production",
+            billingChannel: env.googleGenaiUseVertexai && cfg.model_provider === "google" ? "vertex" : "direct",
+          });
+          const delivery = deliverUsage(receipt, {
+            url: env.aiUsageUrl, token: env.aiUsageServiceToken, fetchFn: fetch,
+            sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+          }).then((delivered) => {
+            if (!delivered) {
+              log.error({ event: "ai_usage_delivery_failed", receipt }, "AI usage receipt needs reconciliation");
+            }
+          });
+          usageDeliveries.add(delivery);
+          void delivery.finally(() => usageDeliveries.delete(delivery));
         });
 
         // Capture every conversation turn (write-through). Subscribing before
@@ -471,6 +499,7 @@ export default defineAgent({
       // cannot escape as an unhandled promise.
       await recordingTask.catch(() => undefined);
       await interviewRun.catch(() => undefined);
+      await Promise.allSettled([...usageDeliveries]);
 
       // Stop the egress (safe: ignores an already-stopped race when the room
       // ended on its own) and reflect the stopped state on the job record.

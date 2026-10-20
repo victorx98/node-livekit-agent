@@ -279,3 +279,11 @@ persisted candidate/interviewer turns, bounded by `RECOVERY_MAX_TURNS=24` and
 `RECOVERY_MAX_CHARS=24000`.
 
 Copy `.env.example` to `.env` and fill in values as subsystems are wired.
+
+## AI usage accounting
+
+Set `AI_USAGE_URL` to the API's `/api/internal/ai-usage` endpoint and `AI_USAGE_SERVICE_TOKEN` to the same service credential configured on the API. Both values are required together. Set `AI_USAGE_ENVIRONMENT` to the reporting environment (default `production`). No database credential is needed by the agent.
+
+The agent sends one receipt for each `realtime_model_metrics` event immediately after that generation turn. Receipts retain the interview/job and connection identifiers, reported input/cache/output modality counts, cancellation state and timestamps. Retried HTTP deliveries reuse the same receipt identity, and the API deduplicates them. Outstanding deliveries are awaited during orderly job shutdown. If all delivery attempts fail, the receipt is logged without prompts or transcript text.
+
+Accounting uses the installed LiveKit provider plugins' reported metrics. A failed generation that emits no metrics has no reconstructable per-turn usage; zero-filled absent usage and inconsistent modality totals remain unknown. Request counts on this surface mean reported generation turns, not HTTP requests or rooms. Abrupt process termination can lose an in-flight HTTP receipt; this initial implementation does not add a durable outbox.
