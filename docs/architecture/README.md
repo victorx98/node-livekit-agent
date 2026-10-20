@@ -77,7 +77,9 @@ a bounded transcript ChatContext, up to `RECONNECT_MAX_RETRIES`.
 - `src/ops/metrics.ts`: the `Metrics` instrument interface, a no-op default,
   and a counting fake for tests.
 - `src/ops/telemetry.ts`: the only OpenTelemetry module — builds an OTLP-backed
-  `Metrics` (dynamic import, started only when configured) and worker gauges.
+  `Metrics` and explicit parent/child tracing (dynamic import, started only when
+  configured), correlated heartbeat, and worker gauges. SA2 Docker collection
+  and delivery checks are described in [SA2 observability](../sa2-observability.md).
 - `src/ops/monitoring/handlers.ts`: pure request->`{status, body}` routing for
   the monitoring API; `src/ops/monitoring/server.ts`: thin `node:http` binding.
 - `src/state/redisClient.ts`: lazy process-wide ioredis connection.

@@ -1,4 +1,5 @@
 import { pino, type Logger, type DestinationStream } from "pino";
+import { getActiveTraceFields } from "./telemetry.js";
 import { loadEnv } from "../config/env.js";
 
 // Structured JSON logging (§20). Base fields (service, env) are attached to
@@ -14,6 +15,9 @@ const REDACT_PATHS = [
   "awsSecretAccessKey",
   "authorization",
   "password",
+  "instruction_text",
+  "prompt",
+  "transcript",
   // one level of nesting for the same secret-bearing keys
   "*.openaiApiKey",
   "*.googleApiKey",
@@ -39,6 +43,7 @@ export function createLogger(options: LoggerOptions = {}, destination?: Destinat
         service: options.service ?? "livekit-ai-interview-agent",
         env: options.env ?? "production",
       },
+      mixin: getActiveTraceFields,
       redact: { paths: REDACT_PATHS, censor: "[Redacted]" },
     },
     destination,

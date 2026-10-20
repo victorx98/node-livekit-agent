@@ -279,3 +279,9 @@ persisted candidate/interviewer turns, bounded by `RECOVERY_MAX_TURNS=24` and
 `RECOVERY_MAX_CHARS=24000`.
 
 Copy `.env.example` to `.env` and fill in values as subsystems are wired.
+
+## SA2 Docker observability
+
+For SA2 log collection, explicit parent/child tracing, Grafana credential
+preflight, and end-to-end receipt checks, see
+[`docs/sa2-observability.md`](docs/sa2-observability.md).

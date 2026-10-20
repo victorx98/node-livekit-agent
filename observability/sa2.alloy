@@ -1,0 +1,172 @@
+// SA2-only collector. Credentials are injected by the launch script at runtime.
+logging {
+  level = "warn"
+  format = "json"
+}
+
+discovery.docker "sa2" {
+  host = "unix:///var/run/docker.sock"
+  filter {
+    name = "name"
+    values = ["^/agent-sa2$"]
+  }
+}
+
+loki.source.docker "sa2" {
+  host = "unix:///var/run/docker.sock"
+  targets = discovery.docker.sa2.targets
+  labels = {
+    service_name = "sa2-interview-agent",
+    service_namespace = "sa2",
+    deployment_environment_name = "production",
+  }
+  forward_to = [loki.process.sa2.receiver]
+}
+
+loki.process "sa2" {
+  // Framework/debug records with conversational content must not leave the host.
+  stage.drop {
+    expression = "\"(?:instruction_text|prompt|transcript|content|text)\"\\s*:"
+    drop_counter_reason = "private_content"
+  }
+  stage.replace {
+    expression = "(?i)(?:bearer|basic)\\s+([A-Za-z0-9._~+/-]+=*)"
+    replace = "<redacted>"
+  }
+  stage.replace {
+    expression = "(eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,})"
+    replace = "<redacted-jwt>"
+  }
+  stage.replace {
+    expression = "(?i)x-amz-(?:signature|credential|security-token)=([^&\\s\"']+)"
+    replace = "<redacted>"
+  }
+  stage.replace {
+    expression = "([A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,})"
+    replace = "<redacted-email>"
+  }
+  stage.json {
+    expressions = {
+      trace_id = "",
+      span_id = "",
+      event = "",
+    }
+  }
+  stage.structured_metadata {
+    values = {
+      trace_id = "",
+      span_id = "",
+      event = "",
+    }
+  }
+  forward_to = [otelcol.receiver.loki.sa2.receiver]
+}
+
+otelcol.receiver.loki "sa2" {
+  output {
+    logs = [otelcol.processor.transform.sa2_logs.input]
+  }
+}
+
+// Loki receiver labels are log attributes, not OTel resource identity.
+// Set resource attributes explicitly so Grafana does not label us unknown_service.
+otelcol.processor.transform "sa2_logs" {
+  error_mode = "propagate"
+  log_statements {
+    context = "log"
+    statements = [
+      `set(resource.attributes["service.name"], "sa2-interview-agent")`,
+      `set(resource.attributes["service.namespace"], "sa2")`,
+      `set(resource.attributes["deployment.environment.name"], "production")`,
+      `set(resource.attributes["container.name"], "agent-sa2")`,
+      `delete_key(attributes, "service_name")`,
+      `delete_key(attributes, "service_namespace")`,
+      `delete_key(attributes, "deployment_environment_name")`,
+      `delete_key(attributes, "loki.attribute.labels")`,
+    ]
+  }
+  output {
+    logs = [otelcol.processor.batch.sa2.input]
+  }
+}
+
+otelcol.receiver.otlp "sa2" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    metrics = [otelcol.processor.batch.sa2.input]
+    traces = [otelcol.processor.transform.safe_traces.input]
+  }
+}
+
+// LiveKit spans can contain LLM inputs/outputs. Export only bounded technical
+// attributes; omit prompt/completion contents, exception messages, and stacks.
+otelcol.processor.transform "safe_traces" {
+  error_mode = "ignore"
+  trace_statements {
+    context = "span"
+    statements = [
+      `keep_keys(attributes, ["job_id", "interview_id", "provider", "model", "synthetic", "check_id", "error.type", "session.recovered"])`,
+    ]
+  }
+  trace_statements {
+    context = "spanevent"
+    statements = [`keep_keys(attributes, ["exception.type"])`]
+  }
+  output {
+    traces = [otelcol.processor.batch.sa2.input]
+  }
+}
+
+otelcol.processor.batch "sa2" {
+  timeout = "2s"
+  output {
+    metrics = [otelcol.exporter.otlphttp.grafana.input]
+    traces = [otelcol.exporter.otlphttp.grafana.input]
+    logs = [otelcol.exporter.otlphttp.grafana.input]
+  }
+}
+
+otelcol.auth.headers "grafana" {
+  header {
+    key = "Authorization"
+    value = sys.env("SA2_GRAFANA_OTLP_AUTHORIZATION")
+  }
+}
+
+otelcol.exporter.otlphttp "grafana" {
+  client {
+    endpoint = sys.env("SA2_GRAFANA_OTLP_ENDPOINT")
+    auth = otelcol.auth.headers.grafana.handler
+  }
+  sending_queue {
+    queue_size = 1000
+  }
+  retry_on_failure {
+    initial_interval = "1s"
+    max_interval = "30s"
+    max_elapsed_time = "5m"
+  }
+}
+
+// Delivery counters are inspectable locally even if Grafana is unavailable.
+prometheus.exporter.self "sa2" { }
+prometheus.scrape "sa2" {
+  targets = prometheus.exporter.self.sa2.targets
+  scrape_interval = "30s"
+  forward_to = [prometheus.relabel.delivery.receiver]
+}
+prometheus.relabel "delivery" {
+  rule {
+    source_labels = ["__name__"]
+    regex = "otelcol_exporter_(sent|send_failed)_(spans|metric_points|log_records)(_total)?|otelcol_receiver_(accepted|refused)_(spans|metric_points|log_records)(_total)?|loki_source_docker_target_entries_total"
+    action = "keep"
+  }
+  forward_to = [otelcol.receiver.prometheus.sa2.receiver]
+}
+otelcol.receiver.prometheus "sa2" {
+  output {
+    metrics = [otelcol.processor.batch.sa2.input]
+  }
+}

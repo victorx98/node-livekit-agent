@@ -21,7 +21,7 @@ import { logger } from "./ops/logger.js";
 import { computeLoad, loadThresholdFor } from "./ops/loadFunc.js";
 import { ReadinessState } from "./ops/readiness.js";
 import { startMonitoringServer } from "./ops/monitoring/server.js";
-import { startTelemetry, observeWorkerLoad } from "./ops/telemetry.js";
+import { startTelemetry, observeWorkerLoad, startTelemetryHeartbeat } from "./ops/telemetry.js";
 import { RedisJobTracker } from "./ops/jobTracker.js";
 import { getRedis } from "./state/redisClient.js";
 import { RedisStore } from "./state/redisStore.js";
@@ -42,6 +42,7 @@ async function bootstrap(): Promise<void> {
     endpoint: env.otelExporterOtlpEndpoint,
     withTraces: true,
   });
+  const stopHeartbeat = startTelemetryHeartbeat(telemetry, logger);
   observeWorkerLoad(telemetry, {
     activeJobs: () => sample.active,
     loadRatio: () => sample.ratio,
@@ -58,6 +59,7 @@ async function bootstrap(): Promise<void> {
   });
 
   const shutdown = async (): Promise<void> => {
+    stopHeartbeat();
     await monitoring
       .close()
       .catch((err: unknown) => logger.error({ err }, "monitoring close failed"));
@@ -101,6 +103,10 @@ async function bootstrap(): Promise<void> {
     },
     "starting LiveKit interview agent worker",
   );
+
+  process.once("beforeExit", () => {
+    void shutdown();
+  });
 
   cli.runApp(
     new WorkerOptions({
