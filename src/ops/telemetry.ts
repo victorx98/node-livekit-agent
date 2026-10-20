@@ -1,4 +1,5 @@
-import type { Counter, Histogram, Meter } from "@opentelemetry/api";
+import { hostname } from "node:os";
+import type { Attributes, Counter, Histogram, Meter } from "@opentelemetry/api";
 import { createNoopMetrics, type FailureLabels, type JobLabels, type Metrics } from "./metrics.js";
 
 // OpenTelemetry adapter (§20). The only module that imports OTel. It builds a
@@ -14,6 +15,9 @@ export interface TelemetryHandle {
   metrics: Metrics;
   /** Flush + stop exporters; safe no-op when telemetry is disabled. */
   shutdown: () => Promise<void>;
+  /** Export pending telemetry without closing process-global providers. */
+  flush: () => Promise<void>;
+  withSpan: <T>(name: string, attributes: Attributes, work: () => Promise<T>) => Promise<T>;
   /** The OTel meter, when telemetry is enabled (for worker-level gauges). */
   meter?: Meter;
 }
@@ -21,8 +25,9 @@ export interface TelemetryHandle {
 export interface StartTelemetryOptions {
   serviceName: string;
   endpoint?: string;
-  /** Export traces too (parent worker). Children export metrics only. */
+  /** Explicitly enable tracing in this process (parent or interview child). */
   withTraces?: boolean;
+  withLiveKit?: boolean;
 }
 
 class OtelMetrics implements Metrics {
@@ -79,34 +84,112 @@ class OtelMetrics implements Metrics {
 
 export async function startTelemetry(opts: StartTelemetryOptions): Promise<TelemetryHandle> {
   if (!opts.endpoint) {
-    return { metrics: createNoopMetrics(), shutdown: async () => {} };
+    return {
+      metrics: createNoopMetrics(),
+      shutdown: async () => {},
+      flush: async () => {},
+      withSpan: (_name, _attributes, work) => work(),
+    };
   }
 
-  const [{ NodeSDK }, { PeriodicExportingMetricReader }, metricExp, traceExp, api] =
-    await Promise.all([
-      import("@opentelemetry/sdk-node"),
-      import("@opentelemetry/sdk-metrics"),
-      import("@opentelemetry/exporter-metrics-otlp-http"),
-      import("@opentelemetry/exporter-trace-otlp-http"),
-      import("@opentelemetry/api"),
-    ]);
+  const [contextSdk, metricSdk, metricExp, traceExp, api, traceSdk, resources] = await Promise.all([
+    import("@opentelemetry/context-async-hooks"),
+    import("@opentelemetry/sdk-metrics"),
+    import("@opentelemetry/exporter-metrics-otlp-proto"),
+    import("@opentelemetry/exporter-trace-otlp-proto"),
+    import("@opentelemetry/api"),
+    import("@opentelemetry/sdk-trace-node"),
+    import("@opentelemetry/resources"),
+  ]);
 
-  const sdk = new NodeSDK({
-    serviceName: opts.serviceName,
-    metricReaders: [
-      new PeriodicExportingMetricReader({
-        exporter: new metricExp.OTLPMetricExporter({ url: `${opts.endpoint}/v1/metrics` }),
+  activeApi = api;
+  // Exporter diagnostics otherwise disappear with OTel's default no-op logger.
+  // Do not forward SDK arguments: they can contain headers or private payloads.
+  const diagnostic = () =>
+    console.error(
+      JSON.stringify({
+        level: 50,
+        event: "telemetry_export_error",
+        service: opts.serviceName,
+        msg: "OpenTelemetry reported an error; inspect collector delivery counters",
       }),
-    ],
-    ...(opts.withTraces
-      ? { traceExporter: new traceExp.OTLPTraceExporter({ url: `${opts.endpoint}/v1/traces` }) }
-      : {}),
-    instrumentations: [],
+    );
+  api.diag.setLogger(
+    { error: diagnostic, warn: diagnostic, info: () => {}, debug: () => {}, verbose: () => {} },
+    api.DiagLogLevel.WARN,
+  );
+  const endpoint = opts.endpoint.replace(/\/+$/, "");
+  const reader = new metricSdk.PeriodicExportingMetricReader({
+    exporter: new metricExp.OTLPMetricExporter({ url: `${endpoint}/v1/metrics` }),
+    exportIntervalMillis: 15000,
   });
-  sdk.start();
-
+  const processor = opts.withTraces
+    ? new traceSdk.BatchSpanProcessor(
+        new traceExp.OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+      )
+    : undefined;
+  const resource = resources
+    .defaultResource()
+    .merge(
+      resources.detectResources({
+        detectors: [resources.envDetector, resources.hostDetector],
+      }),
+    )
+    .merge(
+      resources.resourceFromAttributes({
+        "service.name": opts.serviceName,
+        "service.instance.id": hostname(),
+      }),
+    );
+  const meters = new metricSdk.MeterProvider({ resource, readers: [reader] });
+  api.metrics.setGlobalMeterProvider(meters);
+  const livekit =
+    opts.withLiveKit && processor
+      ? await import("@livekit/agents").then((module) => module.telemetry)
+      : undefined;
+  const fanout = livekit ? new livekit.FanoutSpanProcessor() : undefined;
+  if (processor) fanout?.add(processor);
+  const provider = processor
+    ? new traceSdk.NodeTracerProvider({
+        resource,
+        spanProcessors: fanout ? [fanout] : [processor],
+      })
+    : undefined;
+  provider?.register({ contextManager: new contextSdk.AsyncLocalStorageContextManager() });
+  if (livekit && provider && fanout) {
+    livekit.setTracerProvider(provider, {
+      registerSpanProcessor: (p) => fanout.add(p),
+      allowPii: false,
+    });
+  }
   const meter = api.metrics.getMeter(METER_NAME);
-  return { metrics: new OtelMetrics(meter), shutdown: () => sdk.shutdown(), meter };
+  const tracer = api.trace.getTracer(METER_NAME);
+  return {
+    metrics: new OtelMetrics(meter),
+    meter,
+    shutdown: async () => {
+      await Promise.all([meters.shutdown(), provider?.shutdown()]);
+    },
+    flush: async () => {
+      const results = await Promise.allSettled([reader.forceFlush(), provider?.forceFlush()]);
+      if (results.some((result) => result.status === "rejected")) diagnostic();
+    },
+    withSpan: async (name, attributes, work) => {
+      if (!processor) return work();
+      return tracer.startActiveSpan(name, { attributes }, async (span) => {
+        try {
+          return await work();
+        } catch (err) {
+          // Exception messages/stacks may contain prompts, credentials, or signed URLs.
+          span.setStatus({ code: api.SpanStatusCode.ERROR });
+          span.setAttribute("error.type", err instanceof Error ? err.name : "unknown");
+          throw err;
+        } finally {
+          span.end();
+        }
+      });
+    },
+  };
 }
 
 /** Latest worker load sample, refreshed each time the framework calls loadFunc. */
@@ -131,17 +214,54 @@ export function observeWorkerLoad(handle: TelemetryHandle, source: WorkerLoadSou
 
 // --- per-process child metrics singleton (used by the job entrypoint) ---
 
-let childMetricsPromise: Promise<Metrics> | undefined;
+let childTelemetryPromise: Promise<TelemetryHandle> | undefined;
 
-/**
- * Process-wide Metrics for the job child. Started once and reused across the
- * many entry() invocations a reused child handles. Metrics-only (no traces).
- */
-export function getChildMetrics(serviceName: string, endpoint?: string): Promise<Metrics> {
-  if (!childMetricsPromise) {
-    childMetricsPromise = startTelemetry({ serviceName, endpoint, withTraces: false }).then(
-      (handle) => handle.metrics,
-    );
-  }
-  return childMetricsPromise;
+/** One explicit tracing/metrics provider per reused interview child. */
+export function getChildTelemetry(
+  serviceName: string,
+  endpoint?: string,
+): Promise<TelemetryHandle> {
+  childTelemetryPromise ??= startTelemetry({
+    serviceName,
+    endpoint,
+    withTraces: true,
+    withLiveKit: true,
+  });
+  return childTelemetryPromise;
+}
+
+export async function getChildMetrics(serviceName: string, endpoint?: string): Promise<Metrics> {
+  return (await getChildTelemetry(serviceName, endpoint)).metrics;
+}
+
+let activeApi: typeof import("@opentelemetry/api") | undefined;
+export function getActiveTraceFields(): Record<string, string> {
+  const context = activeApi?.trace.getActiveSpan()?.spanContext();
+  return context && activeApi?.trace.isSpanContextValid(context)
+    ? { trace_id: context.traceId, span_id: context.spanId }
+    : {};
+}
+
+/** Low-cost idle signal: a correlated log/span plus a freshness gauge. */
+export function startTelemetryHeartbeat(
+  handle: TelemetryHandle,
+  log: { info: (fields: object, message: string) => void },
+): () => void {
+  if (!handle.meter) return () => {};
+  const gauge = handle.meter.createObservableGauge("worker_telemetry_heartbeat_timestamp_seconds", {
+    unit: "s",
+  });
+  gauge.addCallback((result) => result.observe(Date.now() / 1000));
+  const beat = () => {
+    void handle.withSpan("telemetry.heartbeat", { synthetic: true }, async () => {
+      log.info(
+        { event: "telemetry_heartbeat", synthetic: true, ...getActiveTraceFields() },
+        "telemetry delivery heartbeat",
+      );
+    });
+  };
+  beat();
+  const timer = setInterval(beat, 60000);
+  timer.unref();
+  return () => clearInterval(timer);
 }

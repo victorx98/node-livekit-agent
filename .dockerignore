@@ -7,3 +7,6 @@ dist
 coverage
 **/*.test.ts
 livekit_ai_interview_agent_design_v3.md
+
+.env.*
+!.env.example

@@ -1,0 +1,33 @@
+services:
+  agent-sa2:
+    environment:
+      SERVICE_NAME: sa2-interview-agent
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://sa2-alloy:4318
+      OTEL_EXPORTER_OTLP_HEADERS: ""
+      OTEL_EXPORTER_OTLP_TRACES_HEADERS: ""
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS: ""
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=sa2,deployment.environment.name=production,service.version=${SA2_BUILD_REVISION:-local}
+    stop_grace_period: 5m
+
+  sa2-alloy:
+    image: grafana/alloy:v1.19.2
+    container_name: sa2-alloy
+    restart: unless-stopped
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --disable-reporting
+    environment:
+      SA2_GRAFANA_OTLP_ENDPOINT: ${SA2_GRAFANA_OTLP_ENDPOINT:?Run scripts/launch-sa2-observability.mjs}
+      SA2_GRAFANA_OTLP_AUTHORIZATION: ${SA2_GRAFANA_OTLP_AUTHORIZATION:?Run scripts/launch-sa2-observability.mjs}
+    ports:
+      - "127.0.0.1:12346:12345"
+    volumes:
+      - ./observability/sa2.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - sa2-alloy-data:/var/lib/alloy/data
+
+volumes:
+  sa2-alloy-data:

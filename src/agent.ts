@@ -32,7 +32,7 @@ import { resolveRecordingFilepath } from "./recording/recordingPlan.js";
 import { LiveKitEgressGateway } from "./recording/egressGateway.js";
 import { createS3Preflight } from "./recording/s3Preflight.js";
 import { sendWebhook, type WebhookEvent } from "./ops/webhook.js";
-import { getChildMetrics } from "./ops/telemetry.js";
+import { getChildTelemetry } from "./ops/telemetry.js";
 import type { JobRecord } from "./types/tracker.js";
 import { buildUsageReceipt, deliverUsage } from "./ops/aiUsage.js";
 
@@ -46,8 +46,10 @@ import { buildUsageReceipt, deliverUsage } from "./ops/aiUsage.js";
 // Phase 3 ContextManager + per-turn Redis write-through are intact.
 
 export default defineAgent({
-  prewarm: (_proc: JobProcess) => {
-    // Keep light. The realtime session and Redis store are created per job.
+  prewarm: async (_proc: JobProcess) => {
+    // Register before LiveKit prepares its Cloud tracer for a dispatched job.
+    const env = loadEnv();
+    await getChildTelemetry(env.serviceName, env.otelExporterOtlpEndpoint);
   },
 
   entry: async (ctx: JobContext): Promise<void> => {
@@ -59,7 +61,9 @@ export default defineAgent({
     const providerCapabilities = getRealtimeProviderCapabilities({ cfg, env });
 
     // Per-process metrics (§20); started once per child and reused across jobs.
-    const metrics = await getChildMetrics(env.serviceName, env.otelExporterOtlpEndpoint);
+    const telemetry = await getChildTelemetry(env.serviceName, env.otelExporterOtlpEndpoint);
+    const metrics = telemetry.metrics;
+    ctx.addShutdownCallback(() => telemetry.flush());
     const jobLabels = { provider: cfg.model_provider, model: cfg.model };
 
     const roomName = resolveAssignedRoomName(ctx);
@@ -83,7 +87,6 @@ export default defineAgent({
         instruction_sha256: createHash("sha256")
           .update(cfg.system_instruction, "utf8")
           .digest("hex"),
-        instruction_text: cfg.system_instruction,
         native_recovery: providerCapabilities.nativeRecovery,
       },
       "using API-authored interview instruction",
@@ -193,7 +196,9 @@ export default defineAgent({
     let finalEvent: WebhookEvent = "job_failed";
 
     try {
-      await ctx.connect();
+      await telemetry.withSpan("interview.room_connect", { job_id: cfg.job_id }, () =>
+        ctx.connect(),
+      );
       await updateJob({ status: "connected" });
       log.info(
         {
@@ -326,14 +331,19 @@ export default defineAgent({
         const managed: ManagedSession = {
           start: async () => {
             if (recordingError) throw recordingError;
-            await session.start({
-              agent,
-              room: ctx.room,
-              inputOptions: {
-                participantIdentity: candidateIdentity,
-                closeOnDisconnect: false,
-              },
-            });
+            await telemetry.withSpan(
+              "interview.session_start",
+              { job_id: cfg.job_id, "session.recovered": isReseed },
+              () =>
+                session.start({
+                  agent,
+                  room: ctx.room,
+                  inputOptions: {
+                    participantIdentity: candidateIdentity,
+                    closeOnDisconnect: false,
+                  },
+                }),
+            );
             await updateJob({
               status: "in_progress",
               lastActivityAt: new Date().toISOString(),
@@ -430,7 +440,11 @@ export default defineAgent({
 
       // Swallow a late rejection when the recording failure wins the race and
       // this run is abandoned. Awaiting it below still surfaces the error.
-      interviewRun = ctxMgr.run();
+      interviewRun = telemetry.withSpan(
+        "interview.session",
+        { job_id: cfg.job_id, interview_id: cfg.interview_id },
+        () => ctxMgr.run(),
+      );
       void interviewRun.catch(() => undefined);
 
       const winner = await Promise.race([
@@ -505,10 +519,9 @@ export default defineAgent({
       // ended on its own) and reflect the stopped state on the job record.
       if (recording.egressId) {
         await recorder.stop(recording.egressId);
-        await updateJob({ recording: "stopped" })
-          .catch((err: unknown) =>
-            log.error({ event: "redis_write_failed", err }, "recording-stopped update failed"),
-          );
+        await updateJob({ recording: "stopped" }).catch((err: unknown) =>
+          log.error({ event: "redis_write_failed", err }, "recording-stopped update failed"),
+        );
       }
 
       // Apply the completion TTL so finished interviews stay inspectable then
@@ -535,6 +548,7 @@ export default defineAgent({
         });
         if (!delivery.delivered && !delivery.skipped) metrics.webhookFailed();
       }
+      await telemetry.flush();
     }
   },
 });

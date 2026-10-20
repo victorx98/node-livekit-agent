@@ -49,6 +49,19 @@ describe("createLogger", () => {
     expect(lines[0]?.safeField).toBe("visible");
   });
 
+  it("redacts interview intelligence before collector forwarding", () => {
+    const { lines, stream } = captureSink();
+    const log = createLogger({}, stream);
+    log.info({
+      instruction_text: "private-instruction",
+      prompt: "private-prompt",
+      transcript: "private-transcript",
+      job_id: "job-safe",
+    });
+    expect(JSON.stringify(lines)).not.toContain("private-");
+    expect(lines[0]?.job_id).toBe("job-safe");
+  });
+
   it("honors the configured level (debug suppressed at info)", () => {
     const { lines, stream } = captureSink();
     const log = createLogger({ service: "svc-x", env: "test", level: "info" }, stream);
