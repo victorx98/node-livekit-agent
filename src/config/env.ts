@@ -69,6 +69,9 @@ export interface Env {
   recordingS3Bucket?: string;
   redisUrl?: string;
   webhookUrl?: string;
+  aiUsageUrl?: string;
+  aiUsageServiceToken?: string;
+  aiUsageEnvironment?: string;
   otelExporterOtlpEndpoint?: string;
 }
 
@@ -116,7 +119,25 @@ function boolOr(source: EnvSource, name: string, fallback: boolean): boolean {
 }
 
 export function loadEnv(source: EnvSource = process.env): Env {
+  const aiUsageUrl = str(source, "AI_USAGE_URL");
+  const aiUsageServiceToken = str(source, "AI_USAGE_SERVICE_TOKEN");
+  if (Boolean(aiUsageUrl) !== Boolean(aiUsageServiceToken)) {
+    throw new Error("AI_USAGE_URL and AI_USAGE_SERVICE_TOKEN must be configured together");
+  }
+  if (aiUsageUrl) {
+    let valid = false;
+    try {
+      const url = new URL(aiUsageUrl);
+      valid = ["http:", "https:"].includes(url.protocol) && !url.username && !url.password;
+    } catch {
+      valid = false;
+    }
+    if (!valid) throw new Error("AI_USAGE_URL must be an HTTP(S) URL without credentials");
+  }
   return {
+    aiUsageUrl,
+    aiUsageServiceToken,
+    aiUsageEnvironment: str(source, "AI_USAGE_ENVIRONMENT") ?? "production",
     nodeEnv: strOr(source, "NODE_ENV", "production"),
     serviceName: strOr(source, "SERVICE_NAME", "livekit-ai-interview-agent"),
     logLevel: strOr(source, "LOG_LEVEL", "info"),

@@ -14,6 +14,7 @@ const REDACT_PATHS = [
   "awsAccessKeyId",
   "awsSecretAccessKey",
   "authorization",
+  "aiUsageServiceToken",
   "password",
   "instruction_text",
   "prompt",
@@ -26,6 +27,7 @@ const REDACT_PATHS = [
   "*.awsAccessKeyId",
   "*.awsSecretAccessKey",
   "*.authorization",
+  "*.aiUsageServiceToken",
   "*.password",
 ];
 
